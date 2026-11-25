@@ -1,0 +1,21 @@
+services:
+  knowledge-os:
+    build: .
+    image: knowledge-os:latest
+    container_name: knowledge-os
+    restart: unless-stopped
+    env_file: .env
+    # Ports are published on localhost only by default. Put a reverse proxy (Caddy/Nginx)
+    # with HTTPS in front, or set KOS_BIND=0.0.0.0 to reach it directly by IP (see DEPLOY.md).
+    ports:
+      - "${KOS_BIND:-127.0.0.1}:${KOS_WEB_PORT_HOST:-8786}:8786"
+      - "${KOS_BIND:-127.0.0.1}:${KOS_MCP_PORT_HOST:-8796}:8796"
+    volumes:
+      # Your vault (Markdown), database, attachments and backups. Point this at the old
+      # data folder to upgrade an existing install in place.
+      - ${KOS_DATA_HOST_DIR:-./data}:/data
+    environment:
+      KOS_WEB_PORT: "8786"
+      KOS_MCP_PORT: "8796"
+    security_opt:
+      - no-new-privileges:true
