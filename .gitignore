@@ -1,0 +1,31 @@
+# Secrets
+.env
+.env.*
+!knowledge_os.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# Data & state
+data/
+backups/
+
+# Backups & baks
+*.bak
+*.bak*
+*.*.bak*
+
+# Service config (systemd files — local paths differ)
+knowledge-os-mcp.service
+service.pid
+service.log
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
