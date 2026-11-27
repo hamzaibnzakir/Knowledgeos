@@ -13,6 +13,8 @@ const OP_WORDS = { add: "wants to add", replace: "wants to change", retire: "wan
 
 export default function ReviewPage() {
   const q = useQuery({ queryKey: ["memory", "review"], queryFn: () => api.get<{ facts: Fact[]; proposals: Proposal[]; count: number }>("/api/memory/review") });
+  const trusted = useQuery({ queryKey: ["memory", "trusted-recent"], queryFn: () => api.get<Fact[]>("/api/memory/trusted-recent") });
+  const [showTrusted, setShowTrusted] = useState(false);
   const refresh = useMemoryRefresh();
   const toast = useToast();
   const facts = q.data?.facts ?? [];
@@ -64,6 +66,23 @@ export default function ReviewPage() {
                 <div className="fact-list"><AnimatePresence initial={false}>{list.map((f) => <FactRow key={f.id} fact={f} />)}</AnimatePresence></div>
               </div>
             ))}
+          </section>
+        )}
+        {!!trusted.data?.length && (
+          <section className="review-section">
+            <div className="spread" style={{ alignItems: "baseline" }}>
+              <h2>Saved by trusted agents</h2>
+              <button className="btn sm ghost" onClick={() => setShowTrusted((v) => !v)}>{showTrusted ? "Hide" : `Show ${trusted.data.length}`}</button>
+            </div>
+            <p className="small muted" style={{ marginTop: -4 }}>These skipped review this week because you trust the agent. Glance over them; retire anything wrong.</p>
+            <AnimatePresence initial={false}>
+              {showTrusted && (
+                <motion.div className="review-group" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} style={{ overflow: "hidden" }}>
+                  <div className="fact-list"><AnimatePresence initial={false}>{trusted.data.map((f) => <FactRow key={f.id} fact={f} showSubject />)}</AnimatePresence></div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </section>
         )}
       </div>

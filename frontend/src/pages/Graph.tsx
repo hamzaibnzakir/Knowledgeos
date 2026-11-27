@@ -7,8 +7,12 @@ import { api, noteHref, qs } from "../lib/api";
 import type { GraphData } from "../lib/types";
 import { folderColor } from "../lib/colors";
 import { useTheme } from "../components/ui";
+import Islands from "../components/Islands";
+import { usePhone } from "../lib/hooks";
+import { AnimatePresence, motion } from "motion/react";
+import { Link } from "react-router-dom";
 
-export default function GraphPage() {
+function DesktopGraph() {
   const [params, setParams] = useSearchParams();
   const focus = params.get("focus") ?? "";
   const [depth, setDepth] = useState(2);
@@ -130,6 +134,46 @@ export default function GraphPage() {
           </div>
         </div>
         {data.data && notes === 0 && <div className="empty" style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}>No notes to show yet. Links between notes ([[Title]]) appear here.</div>}
+      </div>
+    </div>
+  );
+}
+
+export default function GraphPage() {
+  const phone = usePhone();
+  const [params] = useSearchParams();
+  return phone && !params.get("focus") ? <PhoneGraph /> : <DesktopGraph />;
+}
+
+/** On a phone a force graph is a smudge; islands read well, and tapping one lists its notes. */
+function PhoneGraph() {
+  const data = useQuery({
+    queryKey: ["graph", "phone"],
+    queryFn: async () => {
+      const g = await api.get<GraphData>("/api/graph");
+      const keep = new Set(g.nodes.filter((n) => !/^(Memory|Agents|Archive)\//.test(n.id)).map((n) => n.id));
+      return { nodes: g.nodes.filter((n) => keep.has(n.id)), edges: g.edges.filter((e) => keep.has(e.source) && keep.has(e.target)) };
+    },
+  });
+  const [picked, setPicked] = useState<string | null>(null);
+  const notes = (data.data?.nodes ?? []).filter((n) => n.type === "note" && ((n.folder || "").split("/")[0] || "Vault") === picked)
+    .sort((a, b) => b.degree - a.degree);
+  return (
+    <div className="page">
+      <div className="mem">
+        <header className="mem-head"><div><h1 className="title">Graph</h1><p className="muted" style={{ margin: 0 }}>Tap an island to see its notes.</p></div></header>
+        <section className="tile" style={{ padding: 14 }}><Islands data={data.data} picked={picked} onIsland={(n) => setPicked((p) => (p === n ? null : n))} /></section>
+        <AnimatePresence mode="wait">
+          {picked && (
+            <motion.section key={picked} className="tile" style={{ marginTop: 12 }} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+              transition={{ type: "spring", stiffness: 380, damping: 32 }}>
+              <div className="tile-head"><h2 style={{ color: folderColor(picked) }}>{picked}</h2><span className="small muted">{notes.length} notes</span></div>
+              <div className="inbox-list">
+                {notes.map((n) => <Link key={n.id} to={noteHref(n.id)}>{n.label}<span className="small muted"> · {n.degree} link{n.degree === 1 ? "" : "s"}</span></Link>)}
+              </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ import json
 import secrets
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 from mcp.server.auth.provider import (AccessToken, AuthorizationCode, AuthorizationParams, RefreshToken, TokenError)
@@ -81,12 +82,50 @@ def list_credentials() -> list[dict]:
                         "scopes": (info.get("scope") or "").split(), "created_at": r["created_at"],
                         "revoked_at": r["revoked_at"], "active_tokens": active[0], "last_used_at": active[1],
                         "redirect_uris": info.get("redirect_uris", []), "revocable": not r["revoked_at"]})
-    for item in out:
-        a = agents.get(item["client_id"], {})
-        item["activity"] = {k: a.get(k) for k in ("first_connected", "last_seen", "actions", "retrievals", "writes")}
-        if a.get("label") and item["kind"] == "oauth":
-            item["label"] = a["label"]
+    from . import memory
+    since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    with db.connect() as conn:
+        for item in out:
+            a = agents.get(item["client_id"], {})
+            item["activity"] = {k: a.get(k) for k in ("first_connected", "last_seen", "actions", "retrievals", "writes",
+                                                      "briefs", "last_brief")}
+            if a.get("label") and item["kind"] == "oauth":
+                item["label"] = a["label"]
+            item["name"] = agent_name(item["client_id"])
+            item.update(agent_policy(item["client_id"]))
+            if READ in item["scopes"] and WRITE not in item["scopes"] and FULL not in item["scopes"]:
+                item["trust"] = "read"
+            item["notes_week"] = conn.execute("SELECT count(*) FROM action_events WHERE actor=? AND action LIKE 'note.%' "
+                                              "AND created_at>=?", (f"mcp:{item['client_id']}", since)).fetchone()[0]
+            item["memory_week"] = memory.agent_week(item["name"])
     return out
+
+
+TRUST_LEVELS = ("read", "review", "trusted")
+
+
+def agent_policy(client_id: str) -> dict:
+    """How far the owner trusts this agent, and whether it is paused."""
+    if client_id == STATIC_READ_CLIENT:
+        return {"trust": "read", "paused": False}
+    with db.connect() as conn:
+        r = conn.execute("SELECT trust, status FROM agents WHERE client_id=?", (client_id,)).fetchone()
+    if not r:
+        return {"trust": "review", "paused": False}
+    return {"trust": r["trust"] if r["trust"] in TRUST_LEVELS else "review", "paused": r["status"] == "paused"}
+
+
+def set_agent_policy(client_id: str, trust: str | None = None, paused: bool | None = None) -> dict:
+    if trust is not None and trust not in TRUST_LEVELS:
+        raise KOSError("Trust must be read, review or trusted")
+    with db.connect() as conn, db.transaction(conn):
+        _ensure_agent(conn, client_id, agent_name(client_id))
+        if trust is not None:
+            conn.execute("UPDATE agents SET trust=? WHERE client_id=?", (trust, client_id))
+        if paused is not None:
+            conn.execute("UPDATE agents SET status=? WHERE client_id=?", ("paused" if paused else "active", client_id))
+        record_event(conn, "agent.policy", details={"client_id": client_id, "trust": trust, "paused": paused}, actor="web")
+    return agent_policy(client_id)
 
 
 def agent_name(client_id: str) -> str:

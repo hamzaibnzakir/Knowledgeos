@@ -76,6 +76,10 @@ Rollback: `docker compose down`, restore the backup folder, `systemctl enable --
 
 `KOS_AI_*` / `OPENAI_API_KEY` are no longer used and can be removed from `.env`. Set `KOS_MCP_WRITE_TOKEN_NAME=Hermes` (the default) so facts Hermes saves through `MCP_AUTH_TOKEN` are attributed to Hermes.
 
+On the **Agents** page you can set each agent to *Read only*, *Reviewed* or *Trusted* (its facts skip Review) and pause it with one switch. The page also shows whether each agent calls `brief` at the start of its sessions.
+
+On a phone, open the site and use *Add to Home Screen*: it runs full screen with its own icon, a bottom tab bar, a quick-capture button and swipe-to-review.
+
 Tell Hermes: call `brief` at the start of each session, save facts with `remember` (subject + source), and log work with `log`. Old tool names (`save_memory`, `search_memory`, `forget_memory`, …) keep working.
 
 ## Without Docker (systemd + venv)

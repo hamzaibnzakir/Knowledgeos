@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, noteHref } from "./api";
 import type { Folder, NoteSummary, SystemInfo } from "./types";
@@ -60,6 +60,32 @@ export function useOpenDaily() {
 export function useMemoryRefresh() {
   const qc = useQueryClient();
   return useCallback(() => {
-    for (const k of ["memory", "system", "notes", "note", "audit"]) qc.invalidateQueries({ queryKey: [k] });
+    for (const k of ["memory", "system", "notes", "note", "audit", "agents"]) qc.invalidateQueries({ queryKey: [k] });
   }, [qc]);
+}
+
+/** True on touch-first devices (phones, tablets), where swipes beat small buttons. */
+export function useCoarsePointer(): boolean {
+  const q = "(pointer: coarse)";
+  const [v, setV] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const on = () => setV(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return v;
+}
+
+/** True when the screen is phone-sized. */
+export function usePhone(): boolean {
+  const q = "(max-width: 820px)";
+  const [v, setV] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const on = () => setV(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return v;
 }

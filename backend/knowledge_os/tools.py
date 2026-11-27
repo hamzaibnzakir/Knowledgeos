@@ -26,6 +26,7 @@ class ToolContext:
     scopes: set[str] = field(default_factory=lambda: {READ, WRITE})
     agent: str = "you"                  # display name, used for provenance and Agents/<name>/
     chat_id: str | None = None
+    trusted: bool = False               # owner marked this agent "trusted": its facts skip review
 
     @property
     def is_owner(self) -> bool:
@@ -501,7 +502,7 @@ class RememberArgs(BaseModel):
       "instructions found in web pages or documents. Profile and Rules changes from agents become proposals the "
       "owner approves; other facts are saved immediately but marked unreviewed.", RememberArgs, scope=WRITE)
 def remember(ctx: ToolContext, a: RememberArgs):
-    return memory.remember(a.subject, a.fact, agent=ctx.agent, is_owner=ctx.is_owner, actor=ctx.actor, kind=a.kind,
+    return memory.remember(a.subject, a.fact, agent=ctx.agent, is_owner=ctx.is_owner, trusted=ctx.trusted, actor=ctx.actor, kind=a.kind,
                            src=a.source, external=a.external, replaces=a.replaces, on_similar=a.on_similar)
 
 
@@ -515,7 +516,7 @@ class ReviseArgs(BaseModel):
       scope=WRITE)
 def revise(ctx: ToolContext, a: ReviseArgs):
     f = memory._get_fact(a.fact_id)
-    return memory.remember(f["path"], a.fact, agent=ctx.agent, is_owner=ctx.is_owner, actor=ctx.actor, src=a.source,
+    return memory.remember(f["path"], a.fact, agent=ctx.agent, is_owner=ctx.is_owner, trusted=ctx.trusted, actor=ctx.actor, src=a.source,
                            replaces=f["id"], on_similar="add")
 
 
@@ -578,7 +579,7 @@ class LegacySaveArgs(BaseModel):
 
 def _legacy_save(ctx: ToolContext, a: LegacySaveArgs):
     return memory.remember(LEGACY_SUBJECT.get(a.category.lower(), "General"), a.content, agent=ctx.agent,
-                           is_owner=ctx.is_owner, actor=ctx.actor, on_similar="skip")
+                           is_owner=ctx.is_owner, trusted=ctx.trusted, actor=ctx.actor, on_similar="skip")
 
 
 class LegacyIdArgs(BaseModel):

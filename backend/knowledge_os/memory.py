@@ -465,7 +465,7 @@ def find_similar(text: str, path: str | None = None, limit: int = 5) -> list[dic
 
 # --------------------------------------------------------------------------- high-level operations
 
-def remember(subject: str, text: str, *, agent: str, is_owner: bool, actor: str, kind: str = "topic",
+def remember(subject: str, text: str, *, agent: str, is_owner: bool, actor: str, trusted: bool = False, kind: str = "topic",
              src: str = "", external: bool = False, replaces: str | None = None,
              on_similar: str = "ask") -> dict:
     """Save a fact. Returns a status the caller can act on:
@@ -501,13 +501,15 @@ def remember(subject: str, text: str, *, agent: str, is_owner: bool, actor: str,
         return {"status": "proposed", "proposal_id": p["id"], "path": path,
                 "message": f"{_subject_of(path)[0]} only changes with the owner's approval. Your proposal is in "
                            "their review queue; do not treat it as saved yet."}
-    fid = add_fact(path, text, by=agent, actor=actor, src=src, external=external, review_new=not is_owner, flag=flag)
+    # Trusted agents skip review, except for text that reads like an instruction.
+    needs_review = not is_owner and (not trusted or bool(flag))
+    fid = add_fact(path, text, by=agent, actor=actor, src=src, external=external, review_new=needs_review, flag=flag)
     if replaces:
         supersede(replaces, actor=actor, by=agent, replaced_by=fid)
     with db.connect() as conn:
         record_event(conn, "memory.remember", details={"fact": fid, "path": path, "replaces": replaces or None,
                                                        "flag": flag or None}, actor=actor)
-    out = {"status": "saved", "fact_id": fid, "path": path, "review": "ok" if is_owner else "new"}
+    out = {"status": "saved", "fact_id": fid, "path": path, "review": "new" if needs_review else "ok"}
     if flag:
         out["warning"] = "This looks like an instruction rather than a fact, so it was flagged and is hidden from " \
                          "briefs until the owner reviews it."
@@ -594,6 +596,32 @@ def resolve_proposal(pid: str, approve: bool, *, text: str | None = None, actor:
 def review_queue() -> dict:
     facts = list_facts(review="new")
     return {"facts": facts, "proposals": list_proposals(), "count": len(facts) + len(list_proposals())}
+
+
+def trusted_recent(days: int = 7, limit: int = 60) -> list[dict]:
+    """Facts agents saved without review in the last few days (trusted agents), so the owner can still glance."""
+    since = (date.today() - timedelta(days=days)).isoformat()
+    with db.connect() as conn:
+        rows = conn.execute("SELECT * FROM facts WHERE status='current' AND review='ok' AND by_agent NOT IN ('', 'you') "
+                            "AND on_date >= ? AND path NOT IN (?, ?) ORDER BY on_date DESC, path, line_no LIMIT ?",
+                            (since, PROFILE, RULES, limit)).fetchall()
+    return [_fact_row(r) for r in rows]
+
+
+def agent_week(name: str, days: int = 7) -> dict:
+    """What one agent did to memory recently: saved, kept, waiting, rejected."""
+    since = (date.today() - timedelta(days=days)).isoformat()
+    with db.connect() as conn:
+        def n(sql: str, *a) -> int:
+            return conn.execute(sql, (name, *a)).fetchone()[0]
+        return {
+            "saved": n("SELECT count(*) FROM facts WHERE by_agent=? AND on_date>=?", since),
+            "waiting": n("SELECT count(*) FROM facts WHERE by_agent=? AND status='current' AND review='new'"),
+            "kept": n("SELECT count(*) FROM facts WHERE by_agent=? AND status='current' AND review='ok' AND on_date>=?", since),
+            "rejected": n("SELECT count(*) FROM facts WHERE by_agent=? AND status<>'current' AND reason='rejected in review' "
+                          "AND until>=?", since),
+            "proposals": n("SELECT count(*) FROM proposals WHERE agent=? AND status='pending'"),
+        }
 
 
 def reject_fact(fid: str, actor: str = "web") -> dict:

@@ -73,18 +73,21 @@ def _touch_agent(client_id: str, tool_name: str, is_write: bool) -> None:
     with db.connect() as conn:
         oauth._ensure_agent(conn, client_id)
         conn.execute("UPDATE agents SET last_seen=?, actions=actions+1, retrievals=retrievals+?, writes=writes+?, "
-                     "skills_used=skills_used+? WHERE client_id=?",
+                     "skills_used=skills_used+?, briefs=briefs+?, last_brief=CASE WHEN ? THEN ? ELSE last_brief END "
+                     "WHERE client_id=?",
                      (t, int(tool_name in RETRIEVAL_TOOLS), int(is_write),
-                      int(tool_name in ("list_skills", "read_skill", "create_skill")), client_id))
+                      int(tool_name in ("list_skills", "read_skill", "create_skill")),
+                      int(tool_name == "brief"), int(tool_name == "brief"), t, client_id))
         if is_write:
             conn.execute("UPDATE agents SET label=coalesce(label, ?) WHERE client_id=?",
                          (oauth.agent_name(client_id), client_id))
 
 
-def _ctx_for(token) -> tools.ToolContext:
+def _ctx_for(token, policy: dict | None = None) -> tools.ToolContext:
     client_id = token.client_id if token else "unknown"
+    policy = policy or oauth.agent_policy(client_id)
     return tools.ToolContext(actor=f"mcp:{client_id}", scopes=set(token.scopes) if token else set(),
-                             agent=oauth.agent_name(client_id))
+                             agent=oauth.agent_name(client_id), trusted=policy["trust"] == "trusted")
 
 
 def _make_tool_fn(public_name: str, t: tools.Tool, description: str):
@@ -93,10 +96,16 @@ def _make_tool_fn(public_name: str, t: tools.Tool, description: str):
 
     async def fn(**kwargs: Any) -> Any:
         token = get_access_token()
-        ctx = _ctx_for(token)
+        policy = oauth.agent_policy(token.client_id if token else "unknown")
+        if policy["paused"]:
+            raise ToolError("The owner has paused this agent's access to Knowledge OS. Tell the user; nothing was done.")
+        ctx = _ctx_for(token, policy)
         if not ctx.allows(t.scope):
             raise ToolError(f"Not authorized: {public_name} requires the {t.scope} scope. Reconnect and approve write "
                             "access, or use a token with that scope.")
+        if t.scope != tools.READ and policy["trust"] == "read":
+            raise ToolError(f"{public_name} changes the vault, but the owner set this agent to read-only. Tell the user "
+                            "what you wanted to save instead.")
         is_write = t.scope != tools.READ
         _limiter.check(token.client_id if token else "unknown", "write" if is_write else "read",
                        s.mcp_write_rate_per_min if is_write else s.mcp_read_rate_per_min)

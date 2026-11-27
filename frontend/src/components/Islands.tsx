@@ -68,7 +68,7 @@ function layout(data: GraphData): { isles: Isle[]; links: [Dot, Dot][] } {
   return { isles, links };
 }
 
-export default function Islands({ data }: { data?: GraphData }) {
+export default function Islands({ data, onIsland, picked }: { data?: GraphData; onIsland?: (name: string) => void; picked?: string | null }) {
   const nav = useNavigate();
   const [hover, setHover] = useState<string | null>(null);
   const { isles, links } = useMemo(() => (data ? layout(data) : { isles: [], links: [] }), [data]);
@@ -76,17 +76,18 @@ export default function Islands({ data }: { data?: GraphData }) {
   if (isles.length === 0) return <div className="map-empty">Your notes will gather here as islands, one per folder.</div>;
 
   return (
-    <svg className={`islands ${hover ? "hovering" : ""}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Notes grouped by folder">
+    <svg className={`islands ${hover || picked ? "hovering" : ""}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Notes grouped by folder">
       {isles.map((s, i) => (
         <motion.g key={`h-${s.name}`} style={{ transformOrigin: `${s.x}px ${s.y}px` }}
           initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.12 + i * 0.07, type: "spring", bounce: 0.45, duration: 0.8 }}>
-          <circle cx={s.x} cy={s.y} r={s.r} fill={s.color} fillOpacity={0.1} className={`halo ${hover === s.name ? "on" : ""}`}
-            onMouseEnter={() => setHover(s.name)} onMouseLeave={() => setHover(null)} style={{ cursor: "pointer" }} />
+          <circle cx={s.x} cy={s.y} r={s.r} fill={s.color} fillOpacity={0.1} className={`halo ${hover === s.name || picked === s.name ? "on" : ""}`}
+            onMouseEnter={() => setHover(s.name)} onMouseLeave={() => setHover(null)} onClick={() => onIsland?.(s.name)} style={{ cursor: "pointer" }} />
         </motion.g>
       ))}
       {links.map(([a, b], i) => {
-        const hot = hover !== null && (a.island === hover || b.island === hover);
+        const focus = hover ?? picked ?? null;
+        const hot = focus !== null && (a.island === focus || b.island === focus);
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2 - Math.hypot(b.x - a.x, b.y - a.y) * 0.12;
         return (
           <motion.path key={`${a.id}>${b.id}`} className={`link ${hot ? "hot" : ""}`} d={`M${a.x},${a.y} Q${mx},${my} ${b.x},${b.y}`}
@@ -94,13 +95,13 @@ export default function Islands({ data }: { data?: GraphData }) {
         );
       })}
       {isles.map((s, i) => (
-        <g key={s.name} className={`island ${hover === s.name ? "on" : ""}`} onMouseEnter={() => setHover(s.name)} onMouseLeave={() => setHover(null)}>
+        <g key={s.name} className={`island ${hover === s.name || picked === s.name ? "on" : ""}`} onMouseEnter={() => setHover(s.name)} onMouseLeave={() => setHover(null)}>
           {s.dots.map((d, j) => (
             <motion.circle key={d.id} className="dot" cx={d.x} cy={d.y} r={3.5 + Math.sqrt(d.degree) * 2.1} fill={s.color}
               style={{ transformOrigin: `${d.x}px ${d.y}px`, cursor: "pointer" }}
               initial={{ scale: 0 }} animate={{ scale: 1 }} whileHover={{ scale: 1.5 }}
               transition={{ type: "spring", stiffness: 420, damping: 14, delay: 0.3 + i * 0.07 + j * 0.025 }}
-              onClick={() => nav(noteHref(d.id))}>
+              onClick={() => (onIsland && picked !== s.name ? onIsland(s.name) : nav(noteHref(d.id)))}>
               <title>{d.label}</title>
             </motion.circle>
           ))}

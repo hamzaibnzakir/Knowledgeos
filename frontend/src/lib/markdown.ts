@@ -88,7 +88,9 @@ export function escapeHtml(s: string): string {
 
 /** Server snippets mark matches with \x02…\x03; escape everything, then style the markers. */
 export function highlightSnippet(s: string): string {
-  return escapeHtml(s.replace(/\s+/g, " ")).replace(/\x02/g, "<mark>").replace(/\x03/g, "</mark>");
+  // Memory files carry fact ids and [field:: value] provenance; snippets show only the words.
+  const clean = s.replace(/\[[\w-]+::[^\]\n]*\]/g, "").replace(/\s\^[A-Za-z0-9][\w-]{1,31}(?=\s|$)/g, "").replace(/\s+/g, " ");
+  return escapeHtml(clean).replace(/\x02/g, "<mark>").replace(/\x03/g, "</mark>");
 }
 
 export function renderChatMarkdown(src: string): string {

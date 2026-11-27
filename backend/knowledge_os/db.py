@@ -13,7 +13,7 @@ from typing import Iterator
 
 from .config import get_settings
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _init_lock = threading.Lock()
 _initialized_for: set[str] = set()
@@ -285,6 +285,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     _add_column(conn, "agents", "label", "TEXT")
     _add_column(conn, "agents", "status", "TEXT NOT NULL DEFAULT 'active'")
     _add_column(conn, "agents", "writes", "INTEGER NOT NULL DEFAULT 0")
+    _add_column(conn, "agents", "trust", "TEXT NOT NULL DEFAULT 'review'")   # read | review | trusted
+    _add_column(conn, "agents", "briefs", "INTEGER NOT NULL DEFAULT 0")
+    _add_column(conn, "agents", "last_brief", "TEXT")
 
     if 0 < version < 3 and "path" in _columns(conn, "notes"):
         # v3 indexes memory facts from Markdown: force every note to be re-read once.

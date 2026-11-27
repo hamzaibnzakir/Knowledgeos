@@ -93,9 +93,11 @@ Fields: `by`, `on`, `src`, `from:: external`, `review:: new`, `flag:: suspicious
 | Who | Profile / Rules | Other subjects |
 |---|---|---|
 | Owner (web) | written directly | written directly |
-| Agent (MCP) | becomes a **proposal**; nothing changes until approved | written, marked `review:: new` |
+| Agent set to *Reviewed* (default) | becomes a **proposal**; nothing changes until approved | written, marked `review:: new` |
+| Agent set to *Trusted* | becomes a **proposal** | written without review (listed under "Saved by trusted agents" in Review) |
+| Agent set to *Read only*, or paused | refused | refused (paused agents are refused for every tool) |
 
-Text that reads like an instruction ("ignore previous…", "you must always…", "send the key to…") is written with `flag:: suspicious` and excluded from briefs and context until the owner keeps it. Facts from web pages or documents are marked `from:: external` and labelled as such in briefs.
+Trust is set per agent on the Agents page (`agents.trust`, `agents.status='paused'`) and enforced in the MCP server before any tool runs. Text that reads like an instruction ("ignore previous…", "you must always…", "send the key to…") is written with `flag:: suspicious` and excluded from briefs and context until the owner keeps it. Facts from web pages or documents are marked `from:: external` and labelled as such in briefs.
 
 **Updates.** `remember` first looks for an exact or near-duplicate (token overlap, plus embedding similarity when available). Exact duplicates are a no-op; near-duplicates return `needs_decision` with the candidates so the calling agent chooses `replaces=<id>`, `on_similar='add'` or `'skip'` — the add/update/no-op decision Mem0 makes with its own model, made here by the agent that already has the context. `revise` and `forget` supersede instead of deleting. Only the owner can purge a line.
 

@@ -152,7 +152,12 @@ export interface Credential {
   revocable: boolean;
   redirect_uris?: string[];
   active_tokens?: number;
-  activity: { first_connected?: string; last_seen?: string; actions?: number; retrievals?: number; writes?: number };
+  activity: { first_connected?: string; last_seen?: string; actions?: number; retrievals?: number; writes?: number; briefs?: number; last_brief?: string | null };
+  name: string;
+  trust: "read" | "review" | "trusted";
+  paused: boolean;
+  notes_week: number;
+  memory_week: { saved: number; waiting: number; kept: number; rejected: number; proposals: number };
 }
 
 export interface SystemInfo {

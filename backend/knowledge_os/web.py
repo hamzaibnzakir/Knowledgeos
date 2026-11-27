@@ -140,6 +140,12 @@ class ProposalDecision(BaseModel):
     text: str | None = None
 
 
+class PolicyIn(BaseModel):
+    client_id: str = Field(..., max_length=200)
+    trust: str | None = None
+    paused: bool | None = None
+
+
 class OwnerNameIn(BaseModel):
     name: str = Field("", max_length=80)
 
@@ -424,6 +430,10 @@ def _routes(app: FastAPI) -> None:  # noqa: C901 - flat route table is easier to
     def mem_purge(fid: str):
         return memory.purge_fact(fid, actor=WEB)
 
+    @app.get("/api/memory/trusted-recent")
+    def mem_trusted_recent():
+        return memory.trusted_recent()
+
     @app.get("/api/memory/review")
     def mem_review():
         return memory.review_queue()
@@ -485,6 +495,10 @@ def _routes(app: FastAPI) -> None:  # noqa: C901 - flat route table is easier to
     @app.post("/api/agents/{client_id:path}/revoke")
     def revoke(client_id: str):
         return oauth.revoke_client(client_id)
+
+    @app.put("/api/agents/policy")
+    def agent_policy(x: PolicyIn):
+        return oauth.set_agent_policy(x.client_id, x.trust, x.paused)
 
     @app.patch("/api/agents/{client_id:path}")
     def relabel(client_id: str, x: LabelIn):
@@ -573,6 +587,8 @@ def _title(path: str) -> str:
 
 
 def _static(app: FastAPI) -> None:
+    import mimetypes
+    mimetypes.add_type("application/manifest+json", ".webmanifest")
     s = get_settings()
     candidates = [s.frontend_dist] if s.frontend_dist else []
     candidates += [Path(__file__).resolve().parent / "static", Path(__file__).resolve().parents[2] / "frontend" / "dist"]

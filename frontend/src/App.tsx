@@ -1,11 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Menu, Search as SearchIcon } from "lucide-react";
+import { Search as SearchIcon } from "lucide-react";
 import { motion } from "motion/react";
 import { api, setUnauthorizedHandler } from "./lib/api";
 import Sidebar from "./components/Sidebar";
 import CommandPalette from "./components/CommandPalette";
+import TabBar from "./components/TabBar";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 const SettingsPage = lazy(() => import("./pages/Settings"));
@@ -55,17 +56,12 @@ function Shell() {
     return () => window.removeEventListener("keydown", onKey);
   }, [nav, createNote]);
 
-  const title = loc.pathname.startsWith("/note/") ? decodeURIComponent(loc.pathname.split("/").pop() ?? "").replace(/\.md$/, "")
-    : ({ "/": "Home", "/search": "Search", "/graph": "Graph", "/memory": "Memory", "/review": "Review", "/agents": "Agents & MCP", "/activity": "Activity", "/settings": "Settings" } as Record<string, string>)[loc.pathname]
-    ?? "Knowledge OS";
-
   return (
     <div className={`shell ${drawer ? "drawer" : ""}`} onClick={(e) => { if (drawer && e.target === e.currentTarget) setDrawer(false); }}>
       <Sidebar onPalette={() => setPalette(true)} onClose={() => setDrawer(false)} />
       <div className="main">
         <div className="mobilebar">
-          <button className="btn ghost icon" aria-label="Menu" onClick={() => setDrawer(true)}><Menu /></button>
-          <b>{title}</b>
+          <b className="mobile-title"><span className="brand-mark" />Knowledge OS</b>
           <button className="btn ghost icon" aria-label="Search" onClick={() => setPalette(true)}><SearchIcon /></button>
         </div>
         <Suspense fallback={<div className="empty">Loading…</div>}>
@@ -86,6 +82,7 @@ function Shell() {
         </motion.div>
         </Suspense>
       </div>
+      <TabBar onMore={() => setDrawer(true)} />
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
     </div>
   );

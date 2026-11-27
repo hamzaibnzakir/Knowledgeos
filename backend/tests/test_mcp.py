@@ -88,6 +88,26 @@ def test_static_tokens_and_scopes(mcp_server):
     assert json.loads(good.content[0].text)["content"].startswith("hello")
 
 
+def test_owner_can_pause_or_limit_an_agent(mcp_server):
+    from knowledge_os import oauth
+    oauth.set_agent_policy(oauth.STATIC_WRITE_CLIENT, trust="read")
+
+    async def try_write(s):
+        return await s.call_tool("create_note", {"path": "Inbox/x", "content": "x"}), await s.call_tool("brief", {})
+
+    bad, ok = run(mcp_server, "static-write-token", try_write)
+    assert bad.is_error and "read-only" in bad.content[0].text and not ok.is_error
+    oauth.set_agent_policy(oauth.STATIC_WRITE_CLIENT, trust="trusted", paused=True)
+    bad, _ = run(mcp_server, "static-write-token", try_write)
+    assert bad.is_error and "paused" in bad.content[0].text
+    oauth.set_agent_policy(oauth.STATIC_WRITE_CLIENT, paused=False)
+    good, _ = run(mcp_server, "static-write-token", try_write)
+    assert not good.is_error
+    item = next(a for a in oauth.list_credentials() if a["client_id"] == oauth.STATIC_WRITE_CLIENT)
+    assert item["trust"] == "trusted" and item["paused"] is False and item["activity"]["briefs"] >= 2
+    assert item["name"] == "Hermes" and "saved" in item["memory_week"]
+
+
 def _pkce():
     verifier = secrets.token_urlsafe(48)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
