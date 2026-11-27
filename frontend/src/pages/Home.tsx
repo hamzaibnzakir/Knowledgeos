@@ -1,11 +1,31 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, FilePlus, Inbox, MessageSquare, Send } from "lucide-react";
+import { CalendarDays, Inbox, Plus, Sparkles } from "lucide-react";
 import { api, noteHref, qs } from "../lib/api";
+import { folderColor } from "../lib/colors";
 import { useCreateNote, useNotes, useOpenDaily, useSystem, useVaultRefresh } from "../lib/hooks";
-import type { AuditEvent } from "../lib/types";
-import { Empty, errorText, timeAgo, useToast } from "../components/ui";
+import type { AuditEvent, GraphData } from "../lib/types";
+import Constellation from "../components/Constellation";
+import { errorText, timeAgo, useToast } from "../components/ui";
+
+const ACTION_WORDS: Record<string, string> = {
+  "note.create": "Created", "note.update": "Edited", "note.edit": "Edited", "note.append": "Added to",
+  "note.move": "Moved", "note.delete": "Deleted", "note.restore": "Restored", "note.relink": "Relinked",
+  "memory.create": "Remembered a fact", "memory.forget": "Forgot a fact", "chat.answer": "Answered a question",
+  "auth.login": "Signed in", "backup.create": "Backed up the vault", "token.create": "Added an agent",
+};
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 5 ? "Still up" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+}
+
+function who(actor: string) {
+  if (actor === "web") return "you";
+  if (actor === "agent") return "assistant";
+  return actor.replace(/^mcp:(agent:)?/, "").replace(/-[0-9a-f]{6}$/, "");
+}
 
 export default function Home() {
   const notes = useNotes();
@@ -15,89 +35,103 @@ export default function Home() {
   const refresh = useVaultRefresh();
   const toast = useToast();
   const nav = useNavigate();
-  const [capture, setCapture] = useState("");
-  const [ask, setAsk] = useState("");
-  const activity = useQuery({ queryKey: ["audit", "home"], queryFn: () => api.get<AuditEvent[]>("/api/audit?limit=8") });
-  const inbox = (notes.data ?? []).filter((n) => n.folder === "Inbox").slice(0, 5);
-  const recent = (notes.data ?? []).slice(0, 10);
-  const s = system.data?.stats;
+  const [text, setText] = useState("");
+  const graph = useQuery({ queryKey: ["graph", "home"], queryFn: () => api.get<GraphData>("/api/graph") });
+  const activity = useQuery({ queryKey: ["audit", "home"], queryFn: () => api.get<AuditEvent[]>("/api/audit?limit=12") });
 
-  const saveCapture = async () => {
-    if (!capture.trim()) return;
+  const all = notes.data ?? [];
+  const recent = all.slice(0, 8);
+  const inbox = all.filter((n) => n.folder === "Inbox").slice(0, 5);
+  const s = system.data?.stats;
+  const events = (activity.data ?? []).filter((e) => e.action !== "auth.login").slice(0, 7);
+
+  const capture = async () => {
+    if (!text.trim()) return;
     try {
-      await api.post("/api/capture", { text: capture });
-      setCapture("");
+      await api.post("/api/capture", { text });
+      setText("");
       refresh();
-      toast("Captured to Inbox");
+      toast("Saved to Inbox");
     } catch (e) { toast(errorText(e), { kind: "error" }); }
   };
+  const ask = () => text.trim() && nav(`/chat${qs({ q: text.trim() })}`);
 
   return (
     <div className="page">
-      <div className="page-inner">
-        <div className="spread" style={{ marginBottom: 20 }}>
+      <div className="home">
+        <header className="home-head">
           <div>
-            <h1 className="title">Home</h1>
-            <div className="muted">{s ? `${s.notes} notes · ${s.links} links · ${s.memories} memories` : "…"}</div>
+            <h1>{greeting()}.</h1>
+            <p>
+              {s ? <>{s.notes.toLocaleString()} notes, {s.links.toLocaleString()} links between them, {s.memories} things remembered.</> : "Loading your vault…"}
+            </p>
           </div>
           <div className="row">
-            <button className="btn" onClick={openDaily}><CalendarDays />Today</button>
-            <button className="btn primary" onClick={() => createNote()}><FilePlus />New note</button>
+            <button className="btn" onClick={openDaily}><CalendarDays />Today's note</button>
+            <button className="btn primary" onClick={() => createNote()}><Plus />New note</button>
           </div>
-        </div>
+        </header>
 
-        <div className="grid cols-2">
-          <div className="card card-pad stack">
-            <div className="row"><Inbox size={16} /><b>Quick capture</b></div>
-            <textarea className="textarea" rows={3} placeholder="An idea, a link, a thing to remember later…" value={capture}
-                      onChange={(e) => setCapture(e.target.value)}
-                      onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") saveCapture(); }} />
-            <div className="spread"><span className="muted small">Saved to Inbox/ · ⌘↵</span><button className="btn sm" disabled={!capture.trim()} onClick={saveCapture}>Capture</button></div>
-          </div>
-          <div className="card card-pad stack">
-            <div className="row"><MessageSquare size={16} /><b>Ask your knowledge</b></div>
-            <form className="stack" onSubmit={(e) => { e.preventDefault(); if (ask.trim()) nav(`/chat${qs({ q: ask.trim() })}`); }}>
-              <textarea className="textarea" rows={3} placeholder="What did I learn about scaling winning products?" value={ask} onChange={(e) => setAsk(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (ask.trim()) nav(`/chat${qs({ q: ask.trim() })}`); } }} />
-              <div className="spread">
-                <span className="muted small">{system.data?.ai.configured ? `Answers cite your notes · ${system.data.ai.agent_model}` : "AI not configured — search still works"}</span>
-                <button className="btn sm" disabled={!ask.trim()}><Send />Ask</button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <Constellation data={graph.data} recent={recent.map((n) => n.path)} />
 
-        <h2 className="section">Recently edited</h2>
-        <div className="card list">
-          {notes.isLoading ? <Empty>Loading…</Empty> : recent.length === 0 ? <Empty>No notes yet. Create one, capture an idea, or drop Markdown files into the vault folder.</Empty> :
-            recent.map((n) => (
-              <Link key={n.path} to={noteHref(n.path)} className="list-item">
-                <div className="spread"><span className="t">{n.title}</span><span className="muted small">{timeAgo(n.updated_at)}</span></div>
-                <div className="s">{n.folder && <span className="muted">{n.folder} · </span>}{n.excerpt}</div>
-              </Link>
-            ))}
-        </div>
-
-        <div className="grid cols-2" style={{ marginTop: 12 }}>
-          <div>
-            <h2 className="section">Inbox</h2>
-            <div className="card list">
-              {inbox.length === 0 ? <Empty>Inbox is clear.</Empty> : inbox.map((n) => (
-                <Link key={n.path} to={noteHref(n.path)} className="list-item"><div className="t">{n.title}</div><div className="s">{n.excerpt}</div></Link>
-              ))}
+        <div className="composer-home">
+          <textarea placeholder="Jot something down, or ask what you know…" value={text} onChange={(e) => setText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); capture(); }
+                      else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && text.trim().endsWith("?")) { e.preventDefault(); ask(); }
+                    }} />
+          <div className="actions">
+            <span className="small muted">
+              {system.data?.ai.configured ? "Questions are answered from your notes, with sources." : "Ask shows matching passages until an AI key is set."}
+            </span>
+            <div className="row">
+              <button className="btn sm" disabled={!text.trim()} onClick={capture}><Inbox />Save to Inbox</button>
+              <button className="btn sm primary" disabled={!text.trim()} onClick={ask}><Sparkles />Ask</button>
             </div>
           </div>
-          <div>
-            <h2 className="section">Latest activity</h2>
-            <div className="card list">
-              {(activity.data ?? []).length === 0 ? <Empty>Nothing yet.</Empty> : activity.data!.map((e) => (
-                <div key={e.id} className="list-item">
-                  <div className="spread"><span className="small"><code>{e.action}</code> <span className="muted">by {e.actor}</span></span><span className="muted small">{timeAgo(e.created_at)}</span></div>
-                  {typeof e.details.path === "string" && <div className="s">{e.details.path}</div>}
-                </div>
-              ))}
+        </div>
+
+        <div className="home-cols">
+          <section>
+            <div className="col-head"><h2>Recently edited</h2><Link to="/search">Browse all</Link></div>
+            <div className="rail-list">
+              {notes.isLoading ? <div className="muted" style={{ padding: "12px 0" }}>Loading…</div>
+                : recent.length === 0 ? <div className="muted" style={{ padding: "12px 0" }}>Nothing here yet. Write your first note, or drop Markdown files into the vault folder.</div>
+                : recent.map((n) => (
+                  <Link key={n.path} to={noteHref(n.path)} className="rail-item">
+                    <span className="dot" style={{ background: folderColor(n.folder) }} title={n.folder || "Vault root"} />
+                    <span style={{ minWidth: 0 }}>
+                      <div className="t">{n.title}</div>
+                      <div className="s">{n.excerpt || "Empty note"}</div>
+                    </span>
+                    <span className="when">{timeAgo(n.updated_at)}</span>
+                  </Link>
+                ))}
             </div>
-          </div>
+          </section>
+
+          <aside className="stack" style={{ gap: 28 }}>
+            <section>
+              <div className="col-head"><h2>Inbox</h2>{inbox.length > 0 && <span className="small muted">{inbox.length} to sort</span>}</div>
+              {inbox.length === 0 ? <div className="feed-item muted">Clear. Captures land here until you file them.</div>
+                : inbox.map((n) => (
+                  <Link key={n.path} to={noteHref(n.path)} className="feed-item" style={{ display: "block", color: "var(--ink)" }}>{n.title}</Link>
+                ))}
+            </section>
+            <section>
+              <div className="col-head"><h2>What changed</h2><Link to="/activity">Full log</Link></div>
+              {events.length === 0 ? <div className="feed-item muted">No changes yet.</div> : events.map((e) => {
+                const path = typeof e.details.path === "string" ? e.details.path : typeof e.details.to === "string" ? e.details.to : null;
+                const name = path ? path.split("/").pop()!.replace(/\.md$/, "") : null;
+                return (
+                  <div key={e.id} className="feed-item">
+                    <div><b>{ACTION_WORDS[e.action] ?? e.action}</b>{name && <> {path && !e.action.endsWith("delete") ? <Link to={noteHref(path)}>{name}</Link> : name}</>}</div>
+                    <div className="when">by {who(e.actor)}, {timeAgo(e.created_at)}</div>
+                  </div>
+                );
+              })}
+            </section>
+          </aside>
         </div>
       </div>
     </div>

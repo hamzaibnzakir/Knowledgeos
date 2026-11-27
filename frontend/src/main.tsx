@@ -4,6 +4,8 @@ import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { DialogProvider, ToastProvider } from "./components/ui";
+import "@fontsource-variable/schibsted-grotesk";
+import "@fontsource-variable/literata";
 import "./styles.css";
 
 const queryClient = new QueryClient({
