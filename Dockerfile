@@ -34,7 +34,7 @@ RUN if [ "$PRELOAD_MODEL" = "1" ]; then \
       python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5', cache_dir='/opt/models')" ; \
     fi
 
-RUN useradd --uid 1000 --create-home kos && mkdir -p /data && chown -R kos:kos /data /opt/models
+RUN useradd --uid 1000 --create-home kos && mkdir -p /data && chown -R kos:kos /data /opt/models /app
 USER kos
 VOLUME ["/data"]
 EXPOSE 8786 8796
