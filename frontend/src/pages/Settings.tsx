@@ -30,8 +30,24 @@ function General() {
   const [theme, setTheme] = useTheme();
   const sys = useSystem();
   const s = sys.data?.stats;
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [name, setName] = useState<string | null>(null);
+  const saveName = async () => {
+    try {
+      await api.put("/api/owner-name", { name: name ?? "" });
+      qc.invalidateQueries({ queryKey: ["system"] });
+      toast("Name saved");
+    } catch (e) { toast(errorText(e), { kind: "error" }); }
+  };
   return (
     <div className="stack">
+      <form className="card card-pad spread" onSubmit={(e) => { e.preventDefault(); saveName(); }}>
+        <div><b>Your name</b><div className="small muted">Used in the greeting on Home.</div></div>
+        <div className="row"><input className="input" style={{ width: 200 }} placeholder="e.g. Hamza" maxLength={40}
+          value={name ?? sys.data?.owner_name ?? ""} onChange={(e) => setName(e.target.value)} />
+          <button className="btn primary" disabled={name === null}>Save</button></div>
+      </form>
       <div className="card card-pad spread"><div><b>Theme</b><div className="small muted">Follows your device unless you pick one.</div></div>
         <div className="seg">{["system", "light", "dark"].map((t) => <button key={t} className={theme === t ? "on" : ""} onClick={() => setTheme(t)}>{t}</button>)}</div></div>
       {s && <div className="grid cols-4">

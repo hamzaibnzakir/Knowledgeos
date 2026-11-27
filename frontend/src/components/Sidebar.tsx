@@ -4,6 +4,7 @@ import {
   Activity, Bot, Brain, CalendarDays, ChevronDown, ChevronRight, FilePlus, FileText, Folder, FolderPlus, Home,
   Inbox, Network, Search, Settings, Star, X,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { api, noteHref } from "../lib/api";
 import { useCreateNote, useFolders, useNotes, useOpenDaily, useSystem, useVaultRefresh } from "../lib/hooks";
 import type { Folder as FolderT, NoteSummary } from "../lib/types";
@@ -47,6 +48,7 @@ export default function Sidebar({ onPalette, onClose }: { onPalette: () => void;
   const [open, setOpen] = useState<Record<string, boolean>>(loadOpen);
   const tree = useMemo(() => buildTree(notes.data ?? [], folders.data), [notes.data, folders.data]);
   const favorites = (notes.data ?? []).filter((n) => n.favorite);
+  const unreviewed = system.data?.stats.unreviewed ?? 0;
   const currentPath = loc.pathname.startsWith("/note/") ? decodeURIComponent(loc.pathname.slice(6)) : "";
 
   const toggle = (p: string) => setOpen((o) => {
@@ -100,7 +102,7 @@ export default function Sidebar({ onPalette, onClose }: { onPalette: () => void;
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-mark"><Network size={15} /></div>
+        <div className="brand-mark" />
         <span className="grow">Knowledge OS</span>
         <button className="btn ghost sm icon hide-desktop" aria-label="Close menu" onClick={onClose}><X /></button>
       </div>
@@ -108,13 +110,20 @@ export default function Sidebar({ onPalette, onClose }: { onPalette: () => void;
         <Search size={14} /><span>Search or jump…</span><kbd>⌘K</kbd>
       </button>
       <nav className="nav">
-        <NavLink to="/" end><Home />Home</NavLink>
-        <NavLink to="/search"><Search />Search</NavLink>
-        <NavLink to="/memory"><Brain />Memory</NavLink>
-        <NavLink to="/review"><Inbox />Review{!!system.data?.stats.unreviewed && <span className="badge">{system.data.stats.unreviewed}</span>}</NavLink>
-        <NavLink to="/graph"><Network />Graph</NavLink>
-        <NavLink to="/agents"><Bot />Agents &amp; MCP</NavLink>
-        <NavLink to="/activity"><Activity />Activity</NavLink>
+        <NavItem to="/" end icon={<Home />}>Home</NavItem>
+        <NavItem to="/search" icon={<Search />}>Search</NavItem>
+        <NavItem to="/memory" icon={<Brain />}>Memory</NavItem>
+        <NavItem to="/review" icon={<Inbox />}>Review
+          <AnimatePresence>
+            {!!unreviewed && (
+              <motion.span key={unreviewed} className="badge" initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.4, opacity: 0 }} transition={{ type: "spring", stiffness: 500, damping: 15 }}>{unreviewed}</motion.span>
+            )}
+          </AnimatePresence>
+        </NavItem>
+        <NavItem to="/graph" icon={<Network />}>Graph</NavItem>
+        <NavItem to="/agents" icon={<Bot />}>Agents &amp; MCP</NavItem>
+        <NavItem to="/activity" icon={<Activity />}>Activity</NavItem>
         <button onClick={openDaily}><CalendarDays />Today's note</button>
       </nav>
 
@@ -145,6 +154,20 @@ export default function Sidebar({ onPalette, onClose }: { onPalette: () => void;
         <NavLink to="/settings" className="btn ghost sm grow" style={{ justifyContent: "flex-start" }}><Settings />Settings</NavLink>
       </div>
     </aside>
+  );
+}
+
+/** A nav link whose dark pill slides from the old page to the new one. */
+function NavItem({ to, end, icon, children }: { to: string; end?: boolean; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <NavLink to={to} end={end}>
+      {({ isActive }) => (
+        <>
+          {isActive && <motion.span layoutId="nav-pill" className="nav-pill" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
+          {icon}{children}
+        </>
+      )}
+    </NavLink>
   );
 }
 

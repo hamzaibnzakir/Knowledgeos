@@ -126,3 +126,9 @@ def test_graph_endpoints(authed):
     assert [o["path"] for o in authed.get("/api/graph/orphans").json()] == ["C.md"]
     local = authed.get("/api/graph/local", params={"path": "A.md"}).json()
     assert {n["id"] for n in local["nodes"]} == {"A.md", "B.md"}
+
+
+def test_owner_name(authed):
+    assert authed.get("/api/system").json()["owner_name"] == ""
+    assert authed.put("/api/owner-name", json={"name": "  Hamza   Z "}).json() == {"owner_name": "Hamza Z"}
+    assert authed.get("/api/system").json()["owner_name"] == "Hamza Z"

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Check, Pencil, Undo2, X } from "lucide-react";
+import { motion } from "motion/react";
 import { api } from "../lib/api";
 import { useMemoryRefresh } from "../lib/hooks";
 import type { Fact } from "../lib/types";
@@ -10,6 +11,7 @@ export default function FactRow({ fact, showSubject = false }: { fact: Fact; sho
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(fact.text);
   const [busy, setBusy] = useState(false);
+  const [kept, setKept] = useState(false);
   const refresh = useMemoryRefresh();
   const toast = useToast();
   const old = fact.status !== "current";
@@ -26,7 +28,10 @@ export default function FactRow({ fact, showSubject = false }: { fact: Fact; sho
 
   const by = !fact.by_agent || fact.by_agent === "you" ? "You" : fact.by_agent;
   return (
-    <div className={`fact ${old ? "old" : ""} ${fact.review === "new" ? "unreviewed" : ""} ${fact.flag ? "flagged" : ""}`}>
+    <motion.div layout="position" className={`fact ${old ? "old" : ""} ${fact.review === "new" ? "unreviewed" : ""} ${fact.flag ? "flagged" : ""} ${kept ? "kept" : ""}`}
+      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: 48, height: 0, paddingTop: 0, paddingBottom: 0, borderBottomWidth: 0, transition: { duration: 0.32, ease: [0.4, 0, 0.2, 1] } }}
+      transition={{ type: "spring", stiffness: 340, damping: 30 }}>
       <div className="fact-main">
         {editing ? (
           <form onSubmit={(e) => { e.preventDefault(); save(); }} className="row">
@@ -49,7 +54,7 @@ export default function FactRow({ fact, showSubject = false }: { fact: Fact; sho
         <div className="fact-actions">
           {fact.review === "new" && (
             <button className="btn sm" disabled={busy} title={fact.flag ? "Keep it even though it looks like an instruction" : "Keep this fact"}
-                    onClick={() => run(() => api.post(`/api/memory/facts/${fact.id}/approve`), "Approved")}><Check />{fact.flag ? "Keep anyway" : "Keep"}</button>
+                    onClick={() => { setKept(true); run(() => api.post(`/api/memory/facts/${fact.id}/approve`), "Approved"); }}><Check />{fact.flag ? "Keep anyway" : "Keep"}</button>
           )}
           <button className="btn sm ghost icon" title="Edit" onClick={() => setEditing(true)}><Pencil /></button>
           <button className="btn sm ghost icon" title={fact.review === "new" ? "Reject" : "Retire (moves to History)"} disabled={busy}
@@ -59,6 +64,6 @@ export default function FactRow({ fact, showSubject = false }: { fact: Fact; sho
           </button>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

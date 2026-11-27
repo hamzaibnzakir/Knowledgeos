@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "motion/react";
 import { Check, CheckCheck, X } from "lucide-react";
 import { api, qs } from "../lib/api";
 import { useMemoryRefresh } from "../lib/hooks";
@@ -37,13 +38,16 @@ export default function ReviewPage() {
         </header>
 
         {q.isLoading ? null : q.data?.count === 0 ? (
-          <div className="all-clear"><CheckCheck size={28} /><div><b>All clear.</b><div className="muted">New facts from agents will show up here.</div></div></div>
+          <motion.div className="all-clear" initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 260, damping: 18 }}>
+            <motion.span initial={{ rotate: -30, scale: 0 }} animate={{ rotate: 0, scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 12, delay: 0.15 }}><CheckCheck size={34} /></motion.span>
+            <div><b>All clear.</b><div className="muted">New facts from agents will show up here.</div></div>
+          </motion.div>
         ) : null}
 
         {proposals.length > 0 && (
           <section className="review-section">
             <h2>Changes to Profile and Rules</h2>
-            {proposals.map((p) => <ProposalCard key={p.id} p={p} />)}
+            <AnimatePresence initial={false}>{proposals.map((p) => <ProposalCard key={p.id} p={p} />)}</AnimatePresence>
           </section>
         )}
 
@@ -57,7 +61,7 @@ export default function ReviewPage() {
                   <Link to={`/memory${qs({ s: path })}`} className="review-subject">{list[0].subject}</Link>
                   {list.filter((x) => !x.flag).length > 1 && <button className="btn sm" onClick={() => approveAll(list)}><Check />Keep all {list.filter((x) => !x.flag).length}</button>}
                 </div>
-                <div className="fact-list">{list.map((f) => <FactRow key={f.id} fact={f} />)}</div>
+                <div className="fact-list"><AnimatePresence initial={false}>{list.map((f) => <FactRow key={f.id} fact={f} />)}</AnimatePresence></div>
               </div>
             ))}
           </section>
@@ -83,7 +87,8 @@ function ProposalCard({ p }: { p: Proposal }) {
     } catch (e) { toast(errorText(e), { kind: "error" }); } finally { setBusy(false); }
   };
   return (
-    <div className={`proposal ${p.flag ? "flagged" : ""}`}>
+    <motion.div layout className={`proposal ${p.flag ? "flagged" : ""}`} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.96, height: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }} transition={{ type: "spring", stiffness: 320, damping: 30 }}>
       <div className="proposal-who"><b>{p.agent}</b> {OP_WORDS[p.op]} <b>{target}</b> <span className="muted">· {timeAgo(p.created_at)}</span></div>
       {p.op !== "add" && p.current_text && <div className="proposal-old">{p.current_text}</div>}
       {p.op !== "retire" && (editing
@@ -100,6 +105,6 @@ function ProposalCard({ p }: { p: Proposal }) {
         {p.op !== "retire" && !editing && <button className="btn sm" onClick={() => setEditing(true)}>Edit first</button>}
         <button className="btn sm ghost" disabled={busy} onClick={() => decide(false)}><X />Reject</button>
       </div>
-    </div>
+    </motion.div>
   );
 }

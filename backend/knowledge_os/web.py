@@ -140,6 +140,10 @@ class ProposalDecision(BaseModel):
     text: str | None = None
 
 
+class OwnerNameIn(BaseModel):
+    name: str = Field("", max_length=80)
+
+
 class SubjectIn(BaseModel):
     subject: str = Field(..., min_length=1, max_length=120)
     kind: str = "topic"
@@ -501,13 +505,21 @@ def _routes(app: FastAPI) -> None:  # noqa: C901 - flat route table is easier to
         s = get_settings()
         with db.connect() as conn:
             last_backup = db.get_meta(conn, "last_backup")
-        return {"version": VERSION, "stats": indexer.stats(),
+            owner_name = db.get_meta(conn, "owner_name") or ""
+        return {"version": VERSION, "stats": indexer.stats(), "owner_name": owner_name,
                 "embeddings": embeddings.status(), "last_backup": last_backup,
                 "mcp_enabled": s.mcp_enabled, "context_token_budget": s.context_token_budget,
                 "memory": {"brief_token_budget": s.brief_token_budget, "core_max_chars": s.core_memory_max_chars,
                            "stale_days": s.memory_stale_days, "write_token_name": s.mcp_write_token_name},
                 "limits": {"max_upload_mb": s.max_upload_mb, "versions_keep": s.versions_keep,
                            "backup_keep": s.backup_keep, "backup_interval_hours": s.backup_interval_hours}}
+
+    @app.put("/api/owner-name")
+    def set_owner_name(x: OwnerNameIn):
+        name = " ".join(x.name.split())[:40]
+        with db.connect() as conn, db.transaction(conn):
+            db.set_meta(conn, "owner_name", name)
+        return {"owner_name": name}
 
     @app.post("/api/reindex")
     def reindex(x: ReindexIn):

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, ChevronRight, FileText, Plus, Search } from "lucide-react";
 import { api, noteHref, qs } from "../lib/api";
 import { useMemoryRefresh } from "../lib/hooks";
@@ -92,10 +93,14 @@ function Subjects() {
             <h2 className="mem-title">Facts matching “{dq}”</h2>
             <div className="fact-list">
               {found.data?.length === 0 && <Empty>No facts match. Try other words.</Empty>}
-              {found.data?.map((f) => <FactRow key={f.id} fact={f} showSubject />)}
+              <AnimatePresence initial={false}>{found.data?.map((f) => <FactRow key={f.id} fact={f} showSubject />)}</AnimatePresence>
             </div>
           </>
-        ) : current ? <SubjectDetail s={current} /> : subjects.isLoading ? <Empty>Loading…</Empty> : <Empty>Pick a subject.</Empty>}
+        ) : current ? (
+          <motion.div key={current.path} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}>
+            <SubjectDetail s={current} />
+          </motion.div>
+        ) : subjects.isLoading ? <Empty>Loading…</Empty> : <Empty>Pick a subject.</Empty>}
       </section>
     </div>
   );
@@ -104,6 +109,7 @@ function Subjects() {
 function SubjectLink({ s, active, onPick }: { s: Subject; active: boolean; onPick: (p: string) => void }) {
   return (
     <button className={`subject-link ${active ? "on" : ""}`} onClick={() => onPick(s.path)}>
+      {active && <motion.span layoutId="subject-pill" className="nav-pill" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
       <span className="grow">{s.subject}</span>
       {s.unreviewed > 0 && <span className="dot-new" title={`${s.unreviewed} to review`} />}
       <span className="n">{s.facts}</span>
@@ -157,8 +163,9 @@ function SubjectDetail({ s }: { s: Subject }) {
                value={text} onChange={(e) => { setText(e.target.value); setSimilar(null); }} maxLength={600} />
         <button className="btn primary" disabled={!text.trim()}><Plus />Add</button>
       </form>
-      {similar && (
-        <div className="similar">
+      <AnimatePresence>{similar && (
+        <motion.div className="similar" initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6 }}
+          transition={{ type: "spring", stiffness: 380, damping: 26 }}>
           <div className="small"><b>Something similar is already saved.</b> Replace it, or keep both.</div>
           {similar.map((f) => (
             <div key={f.id} className="row" style={{ justifyContent: "space-between" }}>
@@ -167,17 +174,21 @@ function SubjectDetail({ s }: { s: Subject }) {
             </div>
           ))}
           <div className="row"><button className="btn sm" onClick={() => add(true)}>Keep both</button><button className="btn sm ghost" onClick={() => setSimilar(null)}>Cancel</button></div>
-        </div>
-      )}
+        </motion.div>
+      )}</AnimatePresence>
       <div className="fact-list">
         {facts.isLoading ? <Empty>Loading…</Empty> : facts.data?.length === 0
           ? <Empty>No facts yet. Add one above, or let an agent save them with <code>remember</code>.</Empty>
-          : facts.data?.map((f) => <FactRow key={f.id} fact={f} />)}
+          : <AnimatePresence initial={false}>{facts.data?.map((f) => <FactRow key={f.id} fact={f} />)}</AnimatePresence>}
       </div>
       {!!history.data?.length && (
         <div style={{ marginTop: 22 }}>
           <button className="btn ghost sm" onClick={() => setShowHist((v) => !v)}>{showHist ? <ChevronDown /> : <ChevronRight />}History ({history.data.length})</button>
-          {showHist && <div className="fact-list">{history.data.map((f) => <FactRow key={f.id} fact={f} />)}</div>}
+          <AnimatePresence>{showHist && (
+            <motion.div className="fact-list" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }} style={{ overflow: "hidden" }}>
+              {history.data.map((f) => <FactRow key={f.id} fact={f} />)}
+            </motion.div>)}</AnimatePresence>
         </div>
       )}
     </>

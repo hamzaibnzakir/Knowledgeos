@@ -157,6 +157,7 @@ export interface Credential {
 
 export interface SystemInfo {
   version: string;
+  owner_name?: string;
   stats: Record<string, number>;
   embeddings: { provider: string; available: boolean; pending: number; error: string | null; running: boolean };
   last_backup: string | null;

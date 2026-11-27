@@ -40,6 +40,8 @@ export default function GraphPage() {
     const muted = css.getPropertyValue("--muted").trim();
     const line = css.getPropertyValue("--line-2").trim();
     const accent = css.getPropertyValue("--accent").trim();
+    const panel = css.getPropertyValue("--panel").trim();
+    const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const maxDeg = Math.max(1, ...data.data.nodes.map((n) => n.degree));
     const elements = [
       ...data.data.nodes.map((n) => ({
@@ -59,17 +61,17 @@ export default function GraphPage() {
       maxZoom: 3,
       wheelSensitivity: 0.25,
       style: [
-        { selector: "node", style: { "background-color": "data(color)", width: "data(size)", height: "data(size)", label: "data(label)", "font-size": 10, color: ink, "text-valign": "bottom", "text-margin-y": 4, "text-max-width": "120px", "text-wrap": "ellipsis", "min-zoomed-font-size": 7, "border-width": 0 } },
+        { selector: "node", style: { "background-color": "data(color)", width: "data(size)", height: "data(size)", label: "data(label)", "font-size": 10, color: ink, "text-valign": "bottom", "text-margin-y": 4, "text-max-width": "120px", "text-wrap": "ellipsis", "min-zoomed-font-size": 7, "border-width": 2, "border-color": panel, "font-family": "Instrument Sans Variable, sans-serif", "font-weight": 500, "text-outline-color": panel, "text-outline-width": 2 } },
         { selector: "node[type='tag']", style: { shape: "round-rectangle", "font-size": 9, color: muted } },
         { selector: "node[type='missing']", style: { "border-width": 1, "border-style": "dashed", "border-color": muted, "background-opacity": 0.2, color: muted } },
-        { selector: "edge", style: { width: 1, "line-color": line, "curve-style": "haystack", opacity: 0.8 } },
+        { selector: "edge", style: { width: 1.2, "line-color": line, "curve-style": "unbundled-bezier", "control-point-distances": [12], "control-point-weights": [0.5], opacity: 0.9 } },
         { selector: "edge[type='tag']", style: { "line-style": "dotted" } },
         { selector: "edge[type='unresolved']", style: { "line-style": "dashed" } },
         { selector: ".faded", style: { opacity: 0.12 } },
         { selector: ".hl", style: { "border-width": 3, "border-color": accent } },
         { selector: `node[id = ${JSON.stringify(focus)}]`, style: { "border-width": 3, "border-color": accent } },
       ],
-      layout: { name: "cose", animate: false, nodeRepulsion: () => 9000, idealEdgeLength: () => 70, gravity: 0.25, numIter: 1200, padding: 40 } as cytoscape.LayoutOptions,
+      layout: { name: "cose", animate: !calm, animationDuration: 1100, animationEasing: "ease-out-quint", animationThreshold: 0, fit: true, nodeRepulsion: () => 9000, idealEdgeLength: () => 70, gravity: 0.25, numIter: 1200, padding: 40 } as cytoscape.LayoutOptions,
     });
     inst.one("layoutstop", () => {
       if (inst.zoom() > 1.1) { inst.zoom(1.1); inst.center(); }

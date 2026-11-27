@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Menu, Search as SearchIcon } from "lucide-react";
+import { motion } from "motion/react";
 import { api, setUnauthorizedHandler } from "./lib/api";
 import Sidebar from "./components/Sidebar";
 import CommandPalette from "./components/CommandPalette";
@@ -68,6 +69,8 @@ function Shell() {
           <button className="btn ghost icon" aria-label="Search" onClick={() => setPalette(true)}><SearchIcon /></button>
         </div>
         <Suspense fallback={<div className="empty">Loading…</div>}>
+        <motion.div key={loc.pathname.startsWith("/note/") ? "note" : loc.pathname} className="route"
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/note/*" element={<NotePage />} />
@@ -80,6 +83,7 @@ function Shell() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </motion.div>
         </Suspense>
       </div>
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
