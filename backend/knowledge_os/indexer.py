@@ -118,6 +118,8 @@ def index_path(rel: str, *, force: bool = False) -> bool:
                                    (clean, ch.ord, ch.heading, ch.text, ch.hash, ch.tokens))
                 conn.execute("INSERT INTO chunks_fts(text,heading,title,chunk_id,path) VALUES(?,?,?,?,?)",
                              (ch.text, ch.heading, parsed.title, cur.lastrowid, clean))
+            from . import memory
+            memory.reindex_facts(conn, clean, content)
             db.set_meta(conn, "index_generation", str(_bump_generation(conn)))
     _notify_embeddings()
     return True
@@ -143,7 +145,7 @@ def remove_path(rel: str) -> None:
         return
     with _lock, db.connect() as conn:
         with db.transaction(conn):
-            for t in ("notes", "notes_fts", "note_tags", "name_keys", "chunks", "chunks_fts"):
+            for t in ("notes", "notes_fts", "note_tags", "name_keys", "chunks", "chunks_fts", "facts", "facts_fts"):
                 conn.execute(f"DELETE FROM {t} WHERE path=?", (clean,))
             conn.execute("DELETE FROM links WHERE source=?", (clean,))
             dangling = conn.execute("SELECT DISTINCT target_key FROM links WHERE target_path=?", (clean,)).fetchall()
@@ -192,7 +194,7 @@ def _reresolve_all() -> None:
 
 def rebuild() -> dict:
     with _lock, db.connect() as conn, db.transaction(conn):
-        for t in ("notes", "notes_fts", "note_tags", "name_keys", "links", "chunks", "chunks_fts"):
+        for t in ("notes", "notes_fts", "note_tags", "name_keys", "links", "chunks", "chunks_fts", "facts", "facts_fts"):
             conn.execute(f"DELETE FROM {t}")
     return reconcile(full=True)
 
@@ -344,7 +346,9 @@ def stats() -> dict:
             "unresolved_links": one("SELECT count(*) FROM links WHERE target_path IS NULL"),
             "tags": one("SELECT count(DISTINCT tag) FROM note_tags"),
             "chunks": one("SELECT count(*) FROM chunks"),
-            "memories": one("SELECT count(*) FROM memories WHERE status='active'"),
+            "memories": one("SELECT count(*) FROM facts WHERE status='current'"),
+            "unreviewed": one("SELECT count(*) FROM facts WHERE status='current' AND review='new'")
+            + one("SELECT count(*) FROM proposals WHERE status='pending'"),
             "skills": one("SELECT count(*) FROM notes WHERE folder='Skills' OR folder LIKE 'Skills/%'"),
         }
 

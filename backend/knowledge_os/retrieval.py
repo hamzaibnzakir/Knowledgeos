@@ -220,10 +220,11 @@ def build_context(q: str, *, budget: int | None = None, include_memories: bool =
     sources: list[dict] = []
     used = 0
 
-    mems = memory.search(q, k=8) if include_memories else []
+    mems = memory.search_facts(q, k=8, include_flagged=False) if include_memories else []
     if mems:
-        lines = [f"- ({m['category']}) {m['content']}" for m in mems]
-        text = "Relevant memories about the user:\n" + "\n".join(lines)
+        lines = [f"- {m['subject']}: {m['text']} [{m['id']}]" + (" (unreviewed)" if m["review"] == "new" else "")
+                 for m in mems]
+        text = "Relevant memory facts:\n" + "\n".join(lines)
         used += estimate_tokens(text)
         blocks.append(text)
 
@@ -241,6 +242,8 @@ def build_context(q: str, *, budget: int | None = None, include_memories: bool =
 
     seen_text: set[str] = set()
     for h in retrieve(q, k=14, folder=folder):
+        if h["path"].startswith("Memory/") and include_memories:
+            continue  # facts were already included above
         key = h["text"][:200]
         if key in seen_text:
             continue

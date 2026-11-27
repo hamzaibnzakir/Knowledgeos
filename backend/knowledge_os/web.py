@@ -12,13 +12,13 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from . import (agent, ai, attachments, auth, backups, db, embeddings, indexer, mcp_app, memory, oauth, retrieval,
+from . import (attachments, auth, backups, db, embeddings, indexer, mcp_app, memory, oauth, retrieval,
                tools, vault)
 from .config import get_settings
 from .util import Forbidden, KOSError, jloads, now, record_event
 
 log = logging.getLogger("kos.web")
-VERSION = "2.0.0"
+VERSION = "3.0.0"
 
 PUBLIC_API = {"/api/auth/status", "/api/auth/login", "/api/health"}
 CSRF_HEADER = "x-kos"
@@ -118,53 +118,36 @@ class CaptureIn(BaseModel):
     title: str | None = None
 
 
-class MemoryIn(BaseModel):
-    content: str
-    category: str = "general"
-    confidence: float = 1.0
+class FactIn(BaseModel):
+    subject: str = Field(..., min_length=1, max_length=120)
+    fact: str = Field(..., min_length=1, max_length=600)
+    kind: str = "topic"
+    source: str = ""
+    replaces: str | None = None
 
 
-class MemoryPatch(BaseModel):
-    content: str | None = None
-    category: str | None = None
-    confidence: float | None = None
-    pinned: bool | None = None
+class FactEdit(BaseModel):
+    fact: str = Field(..., min_length=1, max_length=600)
+    in_place: bool = False   # fix a typo without keeping the old wording in History
 
 
-class MemoryBulk(BaseModel):
-    items: list[MemoryIn]
+class ForgetIn(BaseModel):
+    reason: str = ""
 
 
-class ChatIn(BaseModel):
-    title: str | None = None
+class ProposalDecision(BaseModel):
+    approve: bool
+    text: str | None = None
 
 
-class ChatPatch(BaseModel):
-    title: str
-
-
-class MessageIn(BaseModel):
-    message: str = Field(..., min_length=1, max_length=100_000)
-    model: str | None = None
-
-
-class AttachmentSave(BaseModel):
-    destination: str | None = None
-    as_skill: bool = False
+class SubjectIn(BaseModel):
+    subject: str = Field(..., min_length=1, max_length=120)
+    kind: str = "topic"
 
 
 class LinkIn(BaseModel):
     url: str = Field(..., max_length=2000)
     folder: str = "Resources"
-    chat_id: str | None = None
-
-
-class DecisionIn(BaseModel):
-    approve: bool
-
-
-class AskIn(BaseModel):
-    question: str = Field(..., min_length=1, max_length=10_000)
 
 
 class SkillIn(BaseModel):
@@ -389,101 +372,89 @@ def _routes(app: FastAPI) -> None:  # noqa: C901 - flat route table is easier to
         return indexer.unresolved_links()
 
     # ---- memory
-    @app.get("/api/memories")
-    def memories(status: str = "active", category: str | None = None, q: str | None = None):
-        return memory.list_memories(status=status, category=category, q=q)
+    OWNER = dict(agent="you", is_owner=True, actor=WEB)
 
-    @app.get("/api/memories/search")
-    def memories_search(q: str, limit: int = 10):
-        return memory.search(q, k=limit)
+    @app.get("/api/memory/subjects")
+    def mem_subjects():
+        return memory.subjects()
 
-    @app.post("/api/memories")
-    def add_memory(x: MemoryIn):
-        return memory.create(x.content, category=x.category, confidence=x.confidence, source="user", actor=WEB)
+    @app.post("/api/memory/subjects")
+    def mem_new_subject(x: SubjectIn):
+        path = memory.resolve_subject(x.subject, x.kind)
+        if vault.exists(path):
+            raise KOSError("That subject already exists", status=409, path=path)
+        memory._ensure_file(path, WEB)
+        return {"path": path}
 
-    @app.post("/api/memories/bulk")
-    def add_memories(x: MemoryBulk):
-        return [memory.create(i.content, category=i.category, confidence=i.confidence, source="review", actor=WEB)
-                for i in x.items[:100]]
+    @app.get("/api/memory/facts")
+    def mem_facts(path: str | None = None, review: str | None = None, status: str = "current", q: str | None = None,
+                  by: str | None = None, limit: int = Query(500, le=5000)):
+        return memory.list_facts(path=path, review=review, status=status, q=q, by=by, limit=limit)
 
-    @app.patch("/api/memories/{memory_id}")
-    def patch_memory(memory_id: int, x: MemoryPatch):
-        return memory.update(memory_id, content=x.content, category=x.category, confidence=x.confidence,
-                             pinned=x.pinned, actor=WEB)
+    @app.get("/api/memory/search")
+    def mem_search(q: str, limit: int = Query(20, le=100)):
+        return memory.search_facts(q, k=limit)
 
-    @app.post("/api/memories/{memory_id}/forget")
-    def forget(memory_id: int):
-        return memory.set_status(memory_id, "archived", actor=WEB)
+    @app.post("/api/memory/facts")
+    def mem_add(x: FactIn):
+        return memory.remember(x.subject, x.fact, kind=x.kind, src=x.source, replaces=x.replaces,
+                               on_similar="ask", **OWNER)
 
-    @app.post("/api/memories/{memory_id}/restore")
-    def restore_memory(memory_id: int):
-        return memory.set_status(memory_id, "active", actor=WEB)
+    @app.post("/api/memory/facts/force")
+    def mem_add_force(x: FactIn):
+        return memory.remember(x.subject, x.fact, kind=x.kind, src=x.source, replaces=x.replaces,
+                               on_similar="add", **OWNER)
 
-    @app.delete("/api/memories/{memory_id}")
-    def purge_memory(memory_id: int):
-        return memory.purge(memory_id, actor=WEB)
+    @app.patch("/api/memory/facts/{fid}")
+    def mem_edit(fid: str, x: FactEdit):
+        if x.in_place:
+            return memory.edit_fact_text(fid, x.fact, actor=WEB)
+        f = memory._get_fact(fid)
+        return memory.remember(f["path"], x.fact, replaces=fid, on_similar="add", **OWNER)
 
-    # ---- chat & agent
-    @app.get("/api/chats")
-    def chats():
-        return agent.list_chats()
+    @app.post("/api/memory/facts/{fid}/forget")
+    def mem_forget(fid: str, x: ForgetIn):
+        return memory.forget(fid, reason=x.reason, **OWNER)
 
-    @app.post("/api/chats")
-    def new_chat(x: ChatIn):
-        return agent.create_chat(x.title)
+    @app.delete("/api/memory/facts/{fid}")
+    def mem_purge(fid: str):
+        return memory.purge_fact(fid, actor=WEB)
 
-    @app.patch("/api/chats/{chat_id}")
-    def rename_chat(chat_id: str, x: ChatPatch):
-        return agent.rename_chat(chat_id, x.title)
+    @app.get("/api/memory/review")
+    def mem_review():
+        return memory.review_queue()
 
-    @app.delete("/api/chats/{chat_id}")
-    def delete_chat(chat_id: str):
-        return agent.delete_chat(chat_id)
+    @app.post("/api/memory/facts/{fid}/approve")
+    def mem_approve(fid: str):
+        return memory.approve_fact(fid, actor=WEB)
 
-    @app.get("/api/chats/{chat_id}/messages")
-    def messages(chat_id: str):
-        return agent.get_messages(chat_id)
+    @app.post("/api/memory/facts/{fid}/reject")
+    def mem_reject(fid: str):
+        return memory.reject_fact(fid, actor=WEB)
 
-    @app.post("/api/chats/{chat_id}/messages")
-    def send(chat_id: str, x: MessageIn):
-        return agent.send_message(chat_id, x.message, model=x.model)
+    @app.post("/api/memory/proposals/{pid}")
+    def mem_proposal(pid: str, x: ProposalDecision):
+        return memory.resolve_proposal(pid, x.approve, text=x.text, actor=WEB)
 
-    @app.get("/api/chats/{chat_id}/attachments")
-    def chat_attachments(chat_id: str):
-        return attachments.list_for_chat(chat_id)
+    @app.get("/api/memory/health")
+    def mem_health():
+        return memory.health()
 
-    @app.post("/api/chats/{chat_id}/extract-memories")
-    def extract(chat_id: str):
-        return {"candidates": memory.extract_candidates(chat_id, actor=WEB)}
+    @app.get("/api/memory/brief")
+    def mem_brief(agent: str = "Hermes", topic: str | None = None):
+        return memory.brief(agent, topic)
 
-    @app.get("/api/pending")
-    def pending(chat_id: str | None = None):
-        return tools.list_pending(chat_id)
+    # ---- import (files and links become notes)
+    @app.post("/api/import/file")
+    async def import_file(file: UploadFile = File(...), folder: str = Form("Inbox")):
+        staged = await attachments.save_upload(file, None, actor=WEB)
+        name = staged["filename"].rsplit(".", 1)[0]
+        out = attachments.save_to_vault(staged["id"], f"{vault.normalize_folder(folder) or 'Inbox'}/{name}", WEB)
+        return {**out, "extraction": staged["extraction"], "chars": staged["extracted_chars"]}
 
-    @app.post("/api/pending/{pending_id}")
-    def decide(pending_id: str, x: DecisionIn):
-        return tools.resolve_pending(pending_id, x.approve, actor=WEB)
-
-    @app.post("/api/ask")
-    def ask(x: AskIn):
-        return agent.ask(x.question)
-
-    @app.post("/api/attachments")
-    async def upload_attachment(file: UploadFile = File(...), chat_id: str | None = Form(None)):
-        return await attachments.save_upload(file, chat_id, actor=WEB)
-
-    @app.post("/api/attachments/{aid}/save")
-    def save_attachment(aid: str, x: AttachmentSave):
-        return attachments.save_to_vault(aid, x.destination or "", WEB, as_skill=x.as_skill)
-
-    @app.delete("/api/attachments/{aid}")
-    def delete_attachment(aid: str):
-        attachments.delete(aid)
-        return {"ok": True}
-
-    @app.post("/api/ingest-link")
-    def ingest(x: LinkIn):
-        return attachments.ingest_link(x.url, folder=x.folder, chat_id=x.chat_id, actor=WEB)
+    @app.post("/api/import/link")
+    def import_link(x: LinkIn):
+        return attachments.ingest_link(x.url, folder=x.folder, actor=WEB)
 
     # ---- skills
     @app.get("/api/skills")
@@ -525,18 +496,16 @@ def _routes(app: FastAPI) -> None:  # noqa: C901 - flat route table is easier to
               before: int | None = None):
         return tools.audit_events(limit=limit, actor=actor, chat_id=chat_id, before_id=before)
 
-    @app.get("/api/usage")
-    def usage(days: int = Query(30, ge=1, le=365)):
-        return ai.usage_summary(days)
-
     @app.get("/api/system")
     def system():
         s = get_settings()
         with db.connect() as conn:
             last_backup = db.get_meta(conn, "last_backup")
-        return {"version": VERSION, "stats": indexer.stats(), "ai": ai.get_gateway().describe(),
+        return {"version": VERSION, "stats": indexer.stats(),
                 "embeddings": embeddings.status(), "last_backup": last_backup,
                 "mcp_enabled": s.mcp_enabled, "context_token_budget": s.context_token_budget,
+                "memory": {"brief_token_budget": s.brief_token_budget, "core_max_chars": s.core_memory_max_chars,
+                           "stale_days": s.memory_stale_days, "write_token_name": s.mcp_write_token_name},
                 "limits": {"max_upload_mb": s.max_upload_mb, "versions_keep": s.versions_keep,
                            "backup_keep": s.backup_keep, "backup_interval_hours": s.backup_interval_hours}}
 

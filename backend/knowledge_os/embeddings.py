@@ -1,4 +1,4 @@
-"""Embeddings: local by default (fastembed / ONNX, no API cost), optional OpenAI, or none.
+"""Embeddings: local (fastembed / ONNX on the server, no API, no cost) or none (keyword search only).
 
 Vectors are keyed by chunk content hash, so unchanged chunks are never
 re-embedded, renames are free and a full reindex costs nothing.
@@ -90,21 +90,6 @@ class LocalEmbedder:
         return _normalize(np.asarray(vecs, dtype=np.float32))
 
 
-class OpenAIEmbedder:
-    sim_floor = 0.30
-
-    def __init__(self, model: str):
-        self.name = f"openai:{model}"
-        self.model_name = model
-        s = get_settings()
-        self.available = bool(s.ai_api_key)
-
-    def embed(self, texts, *, query=False):
-        from .ai import get_gateway
-        vecs = get_gateway().embed(texts, model=self.model_name, operation="embed.query" if query else "embed.index")
-        return _normalize(np.asarray(vecs, dtype=np.float32))
-
-
 def _normalize(m: np.ndarray) -> np.ndarray:
     if m.ndim == 1:
         m = m[None, :]
@@ -126,8 +111,6 @@ def get_embedder() -> Embedder:
                 kind = s.embeddings_provider.lower()
                 if kind == "local":
                     _embedder = LocalEmbedder(s.embeddings_model)
-                elif kind == "openai":
-                    _embedder = OpenAIEmbedder(s.openai_embeddings_model)
                 else:
                     _embedder = NullEmbedder()
     return _embedder

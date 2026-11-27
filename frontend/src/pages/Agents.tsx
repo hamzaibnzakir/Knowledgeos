@@ -62,7 +62,7 @@ export default function AgentsPage() {
           <div className="card card-pad stack">
             <b>MCP endpoint</b>
             <div className="row"><code className="grow" style={{ wordBreak: "break-all" }}>{info.data?.endpoint}</code><button className="btn sm icon" onClick={() => info.data && copy(info.data.endpoint)}><Copy /></button></div>
-            <div className="small muted">Claude, ChatGPT and other OAuth-capable clients: add this URL as a custom connector. You'll approve access with your password and choose read-only or read + write.</div>
+            <div className="small muted">Claude, ChatGPT and other OAuth-capable clients: add this URL as a custom connector. You'll approve access with your password and choose read-only or read + write. Agents should call <code>brief</code> at the start of each session.</div>
           </div>
           <div className="card card-pad stack">
             <b>Agents with a token (Hermes, scripts)</b>

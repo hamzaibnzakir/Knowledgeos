@@ -17,7 +17,7 @@ export const useSystem = () =>
 export function useVaultRefresh() {
   const qc = useQueryClient();
   return useCallback(() => {
-    for (const k of ["notes", "folders", "note", "note-context", "graph", "search", "tags", "system", "favorites"])
+    for (const k of ["notes", "folders", "note", "note-context", "graph", "search", "tags", "system", "favorites", "memory"])
       qc.invalidateQueries({ queryKey: [k] });
   }, [qc]);
 }
@@ -54,4 +54,12 @@ export function useOpenDaily() {
     refresh();
     nav(noteHref(r.path) + "?edit=1");
   }, [nav, refresh]);
+}
+
+/** Refresh everything that shows memory (facts, subjects, review queue, badge counts). */
+export function useMemoryRefresh() {
+  const qc = useQueryClient();
+  return useCallback(() => {
+    for (const k of ["memory", "system", "notes", "note", "audit"]) qc.invalidateQueries({ queryKey: [k] });
+  }, [qc]);
 }

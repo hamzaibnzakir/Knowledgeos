@@ -11,7 +11,7 @@ const SettingsPage = lazy(() => import("./pages/Settings"));
 const ActivityPage = lazy(() => import("./pages/Activity"));
 const AgentsPage = lazy(() => import("./pages/Agents"));
 const MemoryPage = lazy(() => import("./pages/Memory"));
-const ChatPage = lazy(() => import("./pages/Chat"));
+const ReviewPage = lazy(() => import("./pages/Review"));
 const GraphPage = lazy(() => import("./pages/Graph"));
 const SearchPage = lazy(() => import("./pages/Search"));
 const NotePage = lazy(() => import("./pages/NotePage"));
@@ -55,8 +55,8 @@ function Shell() {
   }, [nav, createNote]);
 
   const title = loc.pathname.startsWith("/note/") ? decodeURIComponent(loc.pathname.split("/").pop() ?? "").replace(/\.md$/, "")
-    : ({ "/": "Home", "/search": "Search", "/graph": "Graph", "/memory": "Memory", "/agents": "Agents & MCP", "/activity": "Activity", "/settings": "Settings" } as Record<string, string>)[loc.pathname]
-    ?? (loc.pathname.startsWith("/chat") ? "Chat" : "Knowledge OS");
+    : ({ "/": "Home", "/search": "Search", "/graph": "Graph", "/memory": "Memory", "/review": "Review", "/agents": "Agents & MCP", "/activity": "Activity", "/settings": "Settings" } as Record<string, string>)[loc.pathname]
+    ?? "Knowledge OS";
 
   return (
     <div className={`shell ${drawer ? "drawer" : ""}`} onClick={(e) => { if (drawer && e.target === e.currentTarget) setDrawer(false); }}>
@@ -73,8 +73,7 @@ function Shell() {
           <Route path="/note/*" element={<NotePage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/graph" element={<GraphPage />} />
-          <Route path="/chat" element={<ChatPage />} />
-          <Route path="/chat/:chatId" element={<ChatPage />} />
+          <Route path="/review" element={<ReviewPage />} />
           <Route path="/memory" element={<MemoryPage />} />
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/activity" element={<ActivityPage />} />

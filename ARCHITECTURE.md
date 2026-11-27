@@ -2,11 +2,11 @@
 
 ## Principles
 
-1. **The Markdown vault is the source of truth.** Delete the database and nothing is lost: the index, graph and embeddings rebuild from the files. Memories, chats, history and credentials live in the database and are included in backups.
-2. **Deterministic first.** Parsing, links, tags, graph, chunking, keyword search and indexing never call a model. Embeddings run locally by default. A model is called only for chat, tool-using actions and memory extraction.
-3. **One tool surface.** The built-in assistant, MCP agents and a future voice interface all call the same typed tools in `tools.py`. There is no shell or raw file access for any agent.
-4. **Every write is safe and attributable.** Paths are validated, writes are atomic, the previous version is kept, deletions go to a restorable trash, optimistic concurrency stops lost updates, and each change is logged with its actor.
-5. **Provider-neutral.** Only `ai.py` knows how to talk to a model provider.
+1. **The Markdown vault is the source of truth — including memory.** Notes and memory facts are files. Delete the database and nothing you wrote is lost: the index, graph, facts table and embeddings rebuild from the files. Version history, credentials and the audit log live in the database and are included in backups.
+2. **No AI inside.** Knowledge OS never calls a language model. Parsing, links, graph, search and indexing are deterministic; the only model is a small local embedding model for search by meaning. The intelligence lives in the agents that connect over MCP.
+3. **Memory is a trust problem, not a storage problem.** Research on agent memory (Letta, Mem0, Zep, 2026 poisoning and forgetting studies) shows simple files with good tools work as well as specialised stores; what breaks is stale facts and poisoned writes. So: every fact has an id and provenance, facts are superseded rather than overwritten, the always-loaded files need the owner's approval, and instruction-like text is quarantined.
+4. **One tool surface.** MCP agents and the web API call the same typed tools in `tools.py`. There is no shell or raw file access for any agent.
+5. **Every write is safe and attributable.** Paths are validated, writes are atomic, the previous version is kept, deletions go to a restorable trash, optimistic concurrency stops lost updates, and each change is logged with its actor.
 
 ## Runtime
 
@@ -17,12 +17,12 @@
  Agents ───HTTPS─┤ :8796  MCP SDK (mcp_app.py) ── OAuth 2.1, agent tokens, scopes,       │
                  │          │                     rate limits, attribution            │
                  │          ▼                                                          │
-                 │   tools.py ── agent.py ── ai.py (provider gateway, usage metering)   │
+                 │   tools.py (brief, recall, remember, revise, forget, log, notes…)   │
                  │      │                                                              │
                  │   vault.py ── indexer.py ── retrieval.py ── memory.py               │
                  │      │            │             │                                   │
-                 │  Markdown files   SQLite (WAL): index, FTS5, links, chunks,          │
-                 │  data/vault/      vectors, memories, chats, history, auth, audit     │
+                 │  Markdown files   SQLite (WAL): index, FTS5, links, chunks, facts,   │
+                 │  data/vault/      vectors, proposals, history, auth, audit           │
                  │                                                                     │
                  │  background threads: reconcile (external edits) · embeddings · backups│
                  └─────────────────────────────────────────────────────────────────────┘
@@ -34,8 +34,11 @@ Running the web app and MCP server in one process (two uvicorn servers on one ev
 
 ```
 data/
-  vault/                 your notes (Notes/, Projects/, Resources/, Skills/, Agents/, Inbox/, Attachments/ …)
-  attachments/           files uploaded in chat (staged until you file them)
+  vault/
+    Memory/              Profile.md, Rules.md, Projects/, Clients/, People/, Topics/  (facts)
+    Agents/<name>/       AGENT.md (the agent's own profile) and Log/YYYY-MM-DD.md
+    Notes/ Projects/ Resources/ Skills/ Inbox/ Archive/ Attachments/ …   your knowledge
+  attachments/           staging for imported files
   backups/               kos-backup-YYYYMMDD-HHMMSS.tar.gz (vault + DB snapshot)
   .brainbox/
     knowledge.db         SQLite
@@ -50,12 +53,12 @@ Hidden paths (starting with `.`) are never reachable through the API or tools.
 
 | Kind | Tables | Rebuildable |
 |---|---|---|
-| Index | `notes`, `notes_fts`, `name_keys`, `links`, `note_tags`, `chunks`, `chunks_fts`, `embeddings` | yes, from the vault |
-| Your data | `memories`, `chats`, `messages`, `attachments`, `favorites`, `note_versions`, `trash` | no — backed up |
+| Index | `notes`, `notes_fts`, `name_keys`, `links`, `note_tags`, `chunks`, `chunks_fts`, `facts`, `facts_fts`, `embeddings` | yes, from the vault |
+| Your data | `proposals`, `favorites`, `note_versions`, `trash` (v2 `memories`/`chats` kept read-only after migration) | no — backed up |
 | Security | `sessions`, `auth_failures`, `oauth_clients`, `oauth_codes`, `oauth_pending`, `tokens` (all hashed) | no |
 | Operations | `action_events` (audit), `usage`, `agents`, `pending_actions`, `meta` | no |
 
-Schema upgrades are idempotent and run on start. A v1 database upgrades in place: derived tables are rebuilt, memories/chats/audit/agents are kept.
+Schema upgrades are idempotent and run on start. A v1/v2 database upgrades in place: derived tables are rebuilt, old database memories are written into `Memory/` files (ids `m<old id>`, so legacy tools still find them), and old chats are exported to `Archive/Chats/` as Markdown.
 
 ## Indexing
 
@@ -70,12 +73,35 @@ A reconcile loop picks up edits made outside the app (Obsidian, git, Syncthing) 
 - **Keyword:** FTS5 with Porter stemming, BM25 weighted title > aliases > tags > body.
 - **Semantic:** chunk vectors (`bge-small-en-v1.5` via fastembed/ONNX, or OpenAI) held in an in-memory matrix that refreshes when the index changes. Vectors are keyed by chunk content hash, so unchanged text is never re-embedded. Weak matches are dropped by a model-specific similarity floor.
 - **Fusion:** Reciprocal Rank Fusion of keyword and semantic rankings.
-- **RAG context (`build_context`):** relevant memories, relevant excerpts of chat attachments, then hybrid-retrieved chunks plus one hop of graph neighbours, deduplicated and cut to a token budget (default 5,000), each with a citation number. This package — never the whole vault — is what the model sees.
+- **Context package (`retrieve_context`):** relevant memory facts, then hybrid-retrieved note chunks plus one hop of graph neighbours, deduplicated and cut to a token budget, each with a citation number — so an agent never needs to read the whole vault.
 - **Related notes:** shared links, backlinks, rarity-weighted shared tags, second-degree links and centroid similarity.
 
-## Assistant
+## Memory
 
-`agent.send_message` stores the user turn, builds the context package, then loops (max 6 steps): model → tool calls → `tools.call` → results back to the model. Destructive tools (`delete_note`, `forget_memory`) become pending actions that the UI shows with Approve / Reject. Every answer stores its sources, actions, context size and token usage. Without an API key the assistant returns the most relevant passages instead.
+**Format.** A fact is a Markdown list item with a block id and Dataview-style inline fields, so it reads and edits fine in Obsidian:
+
+```
+- Phase 2 adds a sitemap crawler ^f3k9q2 [by:: Hermes] [on:: 2026-11-27] [src:: Projects/EcomLab.md] [review:: new]
+```
+
+Fields: `by`, `on`, `src`, `from:: external`, `review:: new`, `flag:: suspicious`; superseded facts carry `until`, `replaced-by`, `reason` and live under `## History`, struck through. Any other text in a memory file is free prose. The indexer parses facts from every `Memory/` file into `facts` / `facts_fts`, so hand edits are picked up like any note edit.
+
+**Layers.** `Memory/Profile.md` and `Memory/Rules.md` are always in the brief (capped by `KOS_CORE_MEMORY_MAX_CHARS`). Subject files (`Projects/`, `Clients/`, `People/`, `Topics/`) are pulled in when a topic matches. Notes are found by search. Agent logs (`Agents/<name>/Log/`) are history, never in the brief.
+
+**Trust.**
+
+| Who | Profile / Rules | Other subjects |
+|---|---|---|
+| Owner (web) | written directly | written directly |
+| Agent (MCP) | becomes a **proposal**; nothing changes until approved | written, marked `review:: new` |
+
+Text that reads like an instruction ("ignore previous…", "you must always…", "send the key to…") is written with `flag:: suspicious` and excluded from briefs and context until the owner keeps it. Facts from web pages or documents are marked `from:: external` and labelled as such in briefs.
+
+**Updates.** `remember` first looks for an exact or near-duplicate (token overlap, plus embedding similarity when available). Exact duplicates are a no-op; near-duplicates return `needs_decision` with the candidates so the calling agent chooses `replaces=<id>`, `on_similar='add'` or `'skip'` — the add/update/no-op decision Mem0 makes with its own model, made here by the agent that already has the context. `revise` and `forget` supersede instead of deleting. Only the owner can purge a line.
+
+**Brief.** `brief(topic?)` assembles Profile, Rules, the agent's own `AGENT.md`, the matching subject file, related facts, note pointers, a de-duplicated list of the last week's changes and the review count, cut to `KOS_BRIEF_TOKEN_BUDGET` (default 2,000 tokens).
+
+**Tidy-up.** `memory_health` reports near-duplicates, facts older than `KOS_MEMORY_STALE_DAYS`, flagged facts and how full Profile/Rules are. The bundled `Skills/Memory tidy-up.md` tells an agent (e.g. Hermes on a weekly schedule) how to work through it — the "sleep-time" consolidation Letta describes, done by your own agent.
 
 ## Security
 
@@ -84,6 +110,6 @@ A reconcile loop picks up edits made outside the app (Obsidian, git, Syncthing) 
 - **Files:** path normalisation rejects `..`, hidden segments, control and reserved characters, and symlink escapes. Uploads are size-limited and streamed. Link import blocks private, loopback and link-local addresses (SSRF) and re-checks every redirect.
 - **Secrets** are never returned by the API (the UI shows whether something is configured, not its value).
 
-## Future voice
+## Extending
 
-A voice interface (SIP → Asterisk/FreeSWITCH → LiveKit Agents/Pipecat → STT → `agent` → TTS) plugs into the same `tools.call` and `ai.py` gateway with its own actor name. No core changes are needed.
+A new client (a voice agent, a scheduled job, another MCP host) only needs a token: it gets the same tools, its own name in provenance and its own `Agents/<name>/` folder. Nothing in the core changes.

@@ -227,6 +227,8 @@ def chunk_body(title: str, body: str) -> list[Chunk]:
 
 def make_excerpt(body: str, limit: int = 220) -> str:
     text = FENCE_RE.sub(" ", body)
+    text = re.sub(r"\[[\w-]+::[^\]\n]*\]", "", text)          # Dataview inline fields (memory facts)
+    text = re.sub(r"\s\^[A-Za-z0-9][\w-]{1,31}(?=\s|$)", "", text)  # block ids
     text = HEADING_RE.sub("", text)
     text = WIKI_RE.sub(lambda m: (m.group(4) or m.group(2)), text)
     text = MDLINK_RE.sub(lambda m: m.group(2), text)

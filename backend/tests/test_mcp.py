@@ -82,7 +82,8 @@ def test_static_tokens_and_scopes(mcp_server):
         return tools, bad, good
 
     tools, bad, good = run(mcp_server, "static-read-token", read_only)
-    assert len(tools.tools) > 25
+    names = {t.name for t in tools.tools}
+    assert {"brief", "recall", "remember", "revise", "forget", "log", "search_knowledge"} <= names
     assert bad.is_error and "scope" in bad.content[0].text
     assert json.loads(good.content[0].text)["content"].startswith("hello")
 
@@ -130,7 +131,7 @@ def test_oauth_flow_refresh_rotation_and_revocation(mcp_server):
     assert again.status_code == 400
 
     async def act(s):
-        return await s.call_tool("remember", {"content": "Works with an agent named Hermes"})
+        return await s.call_tool("remember", {"subject": "Profile", "fact": "Works with an agent named Hermes"})
     assert not run(mcp_server, tok["access_token"], act).is_error
 
     # refresh rotates; replaying the old refresh token kills the family

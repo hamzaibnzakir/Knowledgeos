@@ -6,12 +6,6 @@ import { api, noteHref } from "../lib/api";
 import { useSystem, useVaultRefresh } from "../lib/hooks";
 import { bytes, Empty, errorText, timeAgo, useDialog, useTheme, useToast } from "../components/ui";
 
-interface Usage {
-  totals: { calls: number; input_tokens: number; output_tokens: number; cost_usd: number };
-  by_model: { model: string; operation: string; calls: number; input_tokens: number; output_tokens: number; cost_usd: number; avg_latency_ms: number }[];
-  by_day: { day: string; calls: number; tokens: number; cost_usd: number }[];
-}
-
 export default function SettingsPage() {
   const [tab, setTab] = useState("general");
   return (
@@ -19,11 +13,11 @@ export default function SettingsPage() {
       <div className="page-inner narrow">
         <h1 className="title">Settings</h1>
         <div className="tabs">
-          {[["general", "General"], ["ai", "AI & usage"], ["data", "Data & backups"], ["trash", "Trash"], ["security", "Security"]].map(([k, l]) =>
+          {[["general", "General"], ["memory", "Search & memory"], ["data", "Data & backups"], ["trash", "Trash"], ["security", "Security"]].map(([k, l]) =>
             <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}
         </div>
         {tab === "general" && <General />}
-        {tab === "ai" && <AiUsage />}
+        {tab === "memory" && <SearchMemory />}
         {tab === "data" && <Data />}
         {tab === "trash" && <Trash />}
         {tab === "security" && <Security />}
@@ -49,50 +43,29 @@ function General() {
   );
 }
 
-function AiUsage() {
+function SearchMemory() {
   const sys = useSystem();
-  const [days, setDays] = useState(30);
-  const usage = useQuery({ queryKey: ["usage", days], queryFn: () => api.get<Usage>(`/api/usage?days=${days}`) });
   const toast = useToast();
-  const ai = sys.data?.ai;
   const emb = sys.data?.embeddings;
-  const maxTokens = Math.max(1, ...(usage.data?.by_day.map((d) => d.tokens) ?? [1]));
+  const m = sys.data?.memory;
   return (
     <div className="stack">
       <div className="card card-pad stack">
-        <div className="spread"><b>AI provider</b>{ai?.configured ? <span className="chip good">connected</span> : <span className="chip warn">not configured</span>}</div>
-        <dl className="props small">
-          <dt>Provider</dt><dd>{ai?.provider} <span className="muted">({ai?.base_url})</span></dd>
-          <dt>Agent model</dt><dd>{ai?.agent_model}</dd>
-          <dt>Chat model</dt><dd>{ai?.chat_model}</dd>
-          <dt>Utility model</dt><dd>{ai?.utility_model}</dd>
-          <dt>Context budget</dt><dd>{sys.data?.context_token_budget?.toLocaleString()} tokens per answer</dd>
-        </dl>
-        <div className="small muted">Change these with environment variables (KOS_AI_PROVIDER, KOS_AI_BASE_URL, KOS_AI_API_KEY, KOS_AGENT_MODEL…). Keys are never shown here.</div>
-      </div>
-      <div className="card card-pad stack">
-        <div className="spread"><b>Semantic search</b>{emb?.available ? <span className="chip good">on</span> : <span className="chip">off</span>}</div>
-        <div className="small">{emb?.provider} · {emb?.pending ? `${emb.pending} chunks waiting to be embedded${emb.running ? " (working…)" : ""}` : "all chunks embedded"}</div>
+        <div className="spread"><b>Search by meaning</b>{emb?.available ? <span className="chip good">on</span> : <span className="chip">off</span>}</div>
+        <div className="small">A small model on your server ({emb?.provider}) finds notes and facts by meaning. Nothing is sent anywhere.
+          {" "}{emb?.pending ? `${emb.pending} passages waiting to be processed${emb.running ? "…" : "."}` : "Everything is processed."}</div>
         {emb?.error && <div className="small" style={{ color: "var(--bad)" }}>{emb.error}</div>}
-        {emb?.available && !!emb.pending && <button className="btn sm" style={{ alignSelf: "flex-start" }} onClick={async () => { await api.post("/api/embeddings/run"); toast("Embedding started"); }}>Embed now</button>}
+        {emb?.available && !!emb.pending && <button className="btn sm" style={{ alignSelf: "flex-start" }} onClick={async () => { await api.post("/api/embeddings/run"); toast("Started"); }}>Process now</button>}
       </div>
       <div className="card card-pad stack">
-        <div className="spread"><b>Usage</b><div className="seg">{[7, 30, 90].map((d) => <button key={d} className={days === d ? "on" : ""} onClick={() => setDays(d)}>{d}d</button>)}</div></div>
-        {usage.data && <>
-          <div className="grid cols-4">
-            <div className="stat card"><b>{usage.data.totals.calls}</b><span>API calls</span></div>
-            <div className="stat card"><b>{(usage.data.totals.input_tokens / 1000).toFixed(1)}k</b><span>input tokens</span></div>
-            <div className="stat card"><b>{(usage.data.totals.output_tokens / 1000).toFixed(1)}k</b><span>output tokens</span></div>
-            <div className="stat card"><b>${usage.data.totals.cost_usd.toFixed(3)}</b><span>estimated cost</span></div>
-          </div>
-          {usage.data.by_day.length > 0 && <div className="row" style={{ alignItems: "flex-end", height: 70, gap: 2 }}>
-            {usage.data.by_day.map((d) => <div key={d.day} title={`${d.day}: ${d.tokens} tokens, ${d.calls} calls`} style={{ flex: 1, background: "var(--accent)", opacity: 0.75, height: `${Math.max(3, (d.tokens / maxTokens) * 100)}%`, borderRadius: 2 }} />)}
-          </div>}
-          <div className="scroll-x"><table className="tbl"><thead><tr><th>Model</th><th>Operation</th><th>Calls</th><th>Tokens in / out</th><th>Cost</th><th>Avg latency</th></tr></thead>
-            <tbody>{usage.data.by_model.map((r, i) => <tr key={i}><td>{r.model}</td><td>{r.operation}</td><td>{r.calls}</td><td>{r.input_tokens?.toLocaleString()} / {r.output_tokens?.toLocaleString()}</td><td>${(r.cost_usd ?? 0).toFixed(4)}</td><td>{r.avg_latency_ms} ms</td></tr>)}</tbody></table></div>
-          {usage.data.by_model.length === 0 && <Empty>No AI calls in this period.</Empty>}
-          <div className="small muted">Costs are estimates from a built-in price table (override with KOS_PRICING_JSON).</div>
-        </>}
+        <b>Memory</b>
+        <dl className="props small">
+          <dt>Brief size</dt><dd>about {m?.brief_token_budget.toLocaleString()} tokens per session start</dd>
+          <dt>Profile + Rules limit</dt><dd>{m?.core_max_chars.toLocaleString()} characters each</dd>
+          <dt>Stale after</dt><dd>{m?.stale_days} days without an update</dd>
+          <dt>Static token name</dt><dd>{m?.write_token_name}</dd>
+        </dl>
+        <div className="small muted">Change these with KOS_BRIEF_TOKEN_BUDGET, KOS_CORE_MEMORY_MAX_CHARS, KOS_MEMORY_STALE_DAYS and KOS_MCP_WRITE_TOKEN_NAME.</div>
       </div>
     </div>
   );

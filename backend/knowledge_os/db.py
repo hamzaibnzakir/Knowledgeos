@@ -13,7 +13,7 @@ from typing import Iterator
 
 from .config import get_settings
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _init_lock = threading.Lock()
 _initialized_for: set[str] = set()
@@ -116,6 +116,29 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     text, heading, title, chunk_id UNINDEXED, path UNINDEXED,
     tokenize='porter unicode61 remove_diacritics 2'
 );
+CREATE TABLE IF NOT EXISTS facts(
+    id TEXT PRIMARY KEY,
+    path TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    text TEXT NOT NULL,
+    by_agent TEXT NOT NULL DEFAULT '',
+    on_date TEXT NOT NULL DEFAULT '',
+    src TEXT NOT NULL DEFAULT '',
+    external INTEGER NOT NULL DEFAULT 0,
+    review TEXT NOT NULL DEFAULT 'ok',
+    flag TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'current',
+    until TEXT NOT NULL DEFAULT '',
+    replaced_by TEXT NOT NULL DEFAULT '',
+    reason TEXT NOT NULL DEFAULT '',
+    line_no INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_facts_path ON facts(path);
+CREATE INDEX IF NOT EXISTS idx_facts_review ON facts(review, status);
+CREATE VIRTUAL TABLE IF NOT EXISTS facts_fts USING fts5(
+    text, subject, id UNINDEXED, path UNINDEXED, tokenize='porter unicode61 remove_diacritics 2'
+);
 CREATE TABLE IF NOT EXISTS embeddings(
     chunk_hash TEXT NOT NULL,
     model TEXT NOT NULL,
@@ -180,6 +203,12 @@ CREATE TABLE IF NOT EXISTS agents(
 CREATE TABLE IF NOT EXISTS pending_actions(
     id TEXT PRIMARY KEY, chat_id TEXT, tool TEXT NOT NULL, args TEXT NOT NULL,
     summary TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL, resolved_at TEXT
+);
+CREATE TABLE IF NOT EXISTS proposals(
+    id TEXT PRIMARY KEY, path TEXT NOT NULL, op TEXT NOT NULL, fact_id TEXT NOT NULL DEFAULT '',
+    text TEXT NOT NULL DEFAULT '', agent TEXT NOT NULL, src TEXT NOT NULL DEFAULT '', external INTEGER NOT NULL DEFAULT 0,
+    flag TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending',
     created_at TEXT NOT NULL, resolved_at TEXT
 );
 CREATE TABLE IF NOT EXISTS sessions(
@@ -257,6 +286,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     _add_column(conn, "agents", "status", "TEXT NOT NULL DEFAULT 'active'")
     _add_column(conn, "agents", "writes", "INTEGER NOT NULL DEFAULT 0")
 
+    if 0 < version < 3 and "path" in _columns(conn, "notes"):
+        # v3 indexes memory facts from Markdown: force every note to be re-read once.
+        conn.execute("DELETE FROM notes")
     conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
 

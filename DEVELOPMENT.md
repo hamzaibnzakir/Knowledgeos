@@ -9,7 +9,7 @@ pip install -e ".[dev,local-embeddings]"
 export KOS_DATA_DIR=$PWD/../data-dev KOS_MCP_PUBLIC_BASE=http://localhost:8796
 python -m knowledge_os set-password
 python -m knowledge_os serve          # web :8786, MCP :8796
-python -m pytest -q                   # tests run offline (fake embedder, scripted model)
+python -m pytest -q                   # tests run offline (fake embedder)
 ```
 
 ## Frontend
@@ -24,8 +24,8 @@ npm run build      # outputs frontend/dist, which the backend serves
 ## Conventions
 
 - **All writes go through `vault.py` / `memory.py`.** They validate paths, snapshot versions, keep the index in step and record an audit event with the actor.
-- **New capabilities are tools.** Add a function with a Pydantic argument model in `tools.py` and it is available to the assistant and to MCP agents automatically. Mark it `scope=WRITE` if it changes anything and `destructive=True` if the assistant must ask for approval first.
-- **New model providers** go in `ai.py`. If the provider speaks the OpenAI Chat Completions protocol, add a preset; otherwise add a class with the same `chat` / `embed` methods.
+- **New capabilities are tools.** Add a function with a Pydantic argument model in `tools.py` and it is available to MCP agents automatically. Mark it `scope=WRITE` if it changes anything.
+- **Memory changes go through `memory.py`** (`remember`, `forget`, `supersede`, `approve_fact`, `resolve_proposal`). Never write `Memory/` files by string-munging elsewhere; the trust rules live there.
 - **Errors** raise `KOSError` (or `NotFound` / `Conflict` / `Forbidden`) with a message safe to show users; never include filesystem paths or secrets.
 - **Schema changes:** add idempotent steps to `db._migrate` and bump `SCHEMA_VERSION`.
 

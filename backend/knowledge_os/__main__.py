@@ -70,13 +70,13 @@ def main(argv: list[str] | None = None) -> int:
         res = oauth.create_agent_token(args.name, scopes)
         print(f"Token for {res['label']} ({' '.join(res['scopes'])}) — shown once:\n{res['token']}")
     elif args.cmd == "doctor":
-        from . import ai, auth, embeddings, indexer
+        from . import auth, embeddings, indexer, memory
         from .config import get_settings
         s = get_settings()
         report = {
             "data_dir": str(s.data_dir), "vault": str(s.vault_dir), "db": str(s.db_path),
             "password_configured": auth.password_configured(),
-            "ai": ai.get_gateway().describe(), "embeddings": embeddings.status(),
+            "embeddings": embeddings.status(), "review_queue": memory.review_queue()["count"],
             "stats": indexer.stats(), "mcp_public_base": s.mcp_public_base,
         }
         print(json.dumps(report, indent=2))

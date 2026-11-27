@@ -114,6 +114,19 @@ export function timeAgo(iso?: string | null): string {
   return new Date(iso).toLocaleDateString();
 }
 
+/** For date-only values like "2026-11-27": today / yesterday / N days ago. */
+export function dayLabel(day?: string | null): string {
+  if (!day) return "";
+  const d = new Date(day + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return "";
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((today.getTime() - d.getTime()) / 86400000);
+  if (diff <= 0) return "today";
+  if (diff === 1) return "yesterday";
+  if (diff < 30) return `${diff} days ago`;
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: diff > 300 ? "numeric" : undefined });
+}
+
 export function bytes(n?: number | null): string {
   if (!n && n !== 0) return "";
   if (n < 1024) return `${n} B`;

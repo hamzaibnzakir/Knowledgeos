@@ -46,7 +46,6 @@ v1 ran from `/root/personal-ai-knowledge-os` with two systemd services on ports 
    ```
    KOS_DATA_HOST_DIR=/root/personal-ai-knowledge-os/data
    KOS_MCP_PUBLIC_BASE=https://mcp-knowledgeos.brainboxecomlab.com
-   KOS_AI_API_KEY=<your OpenAI key>          # OPENAI_API_KEY also still works
    MCP_AUTH_TOKEN=<the same token Hermes uses today>
    ```
    Your v1 `KNOWLEDGE_OS_GATE_HASH` / `KNOWLEDGE_OS_GATE_SALT` also still work until you set a new password.
@@ -60,12 +59,24 @@ v1 ran from `/root/personal-ai-knowledge-os` with two systemd services on ports 
    docker compose exec knowledge-os python -m knowledge_os set-password
    docker compose logs --tail 50
    ```
-   On first start the database upgrades in place: notes are re-indexed from the vault; memories, chats, the audit log and agent stats are kept.
+   On first start the database upgrades in place: notes are re-indexed, database memories are written into `Memory/` files, old chats are exported to `Archive/Chats/`, and the audit log and agent stats are kept.
 6. **Proxy:** the existing Nginx site for `mcp-knowledgeos.brainboxecomlab.com` → `127.0.0.1:8796` keeps working. If you used to open the web app at `http://<VPS IP>:8786`, either tunnel over SSH or add an HTTPS site for 8786 (see above).
 7. **Agents:** Hermes keeps working with `MCP_AUTH_TOKEN` and the old tool names. OAuth clients (Claude, ChatGPT) must reconnect once because v1 OAuth tokens are not carried over. Afterwards, issue Hermes its own token in *Agents & MCP* and remove `MCP_AUTH_TOKEN`.
 8. **Optional tidy-up:** v1 wrote a log file into `Agents/<agent>/Logs/` on every MCP call. v2 records calls in the activity log instead and no longer writes those files. Delete or archive the old ones if you don't want them in search.
 
 Rollback: `docker compose down`, restore the backup folder, `systemctl enable --now` the old services.
+
+## Upgrading v2 → v3 (memory restructure, no built-in AI)
+
+`git pull && docker compose up -d --build`. On start, v3:
+
+- writes your existing memories into `Memory/` (`profile`/`goal` → `Profile.md`, `preference`/`communication` → `Rules.md`, others → `Memory/Topics/`), keeping their old ids as `m<id>`;
+- exports old chats to `Archive/Chats/` as Markdown;
+- adds `Skills/Memory tidy-up.md`.
+
+`KOS_AI_*` / `OPENAI_API_KEY` are no longer used and can be removed from `.env`. Set `KOS_MCP_WRITE_TOKEN_NAME=Hermes` (the default) so facts Hermes saves through `MCP_AUTH_TOKEN` are attributed to Hermes.
+
+Tell Hermes: call `brief` at the start of each session, save facts with `remember` (subject + source), and log work with `log`. Old tool names (`save_memory`, `search_memory`, `forget_memory`, …) keep working.
 
 ## Without Docker (systemd + venv)
 

@@ -2,10 +2,10 @@ import { useMemo, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import {
   Activity, Bot, Brain, CalendarDays, ChevronDown, ChevronRight, FilePlus, FileText, Folder, FolderPlus, Home,
-  MessageSquare, Network, Search, Settings, Star, X,
+  Inbox, Network, Search, Settings, Star, X,
 } from "lucide-react";
 import { api, noteHref } from "../lib/api";
-import { useCreateNote, useFolders, useNotes, useOpenDaily, useVaultRefresh } from "../lib/hooks";
+import { useCreateNote, useFolders, useNotes, useOpenDaily, useSystem, useVaultRefresh } from "../lib/hooks";
 import type { Folder as FolderT, NoteSummary } from "../lib/types";
 import { errorText, useDialog, useToast } from "./ui";
 
@@ -37,6 +37,7 @@ function loadOpen(): Record<string, boolean> {
 export default function Sidebar({ onPalette, onClose }: { onPalette: () => void; onClose: () => void }) {
   const notes = useNotes();
   const folders = useFolders();
+  const system = useSystem();
   const createNote = useCreateNote();
   const openDaily = useOpenDaily();
   const refresh = useVaultRefresh();
@@ -109,9 +110,9 @@ export default function Sidebar({ onPalette, onClose }: { onPalette: () => void;
       <nav className="nav">
         <NavLink to="/" end><Home />Home</NavLink>
         <NavLink to="/search"><Search />Search</NavLink>
-        <NavLink to="/chat"><MessageSquare />Chat</NavLink>
-        <NavLink to="/graph"><Network />Graph</NavLink>
         <NavLink to="/memory"><Brain />Memory</NavLink>
+        <NavLink to="/review"><Inbox />Review{!!system.data?.stats.unreviewed && <span className="badge">{system.data.stats.unreviewed}</span>}</NavLink>
+        <NavLink to="/graph"><Network />Graph</NavLink>
         <NavLink to="/agents"><Bot />Agents &amp; MCP</NavLink>
         <NavLink to="/activity"><Activity />Activity</NavLink>
         <button onClick={openDaily}><CalendarDays />Today's note</button>

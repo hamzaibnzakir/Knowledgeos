@@ -89,6 +89,28 @@ def list_credentials() -> list[dict]:
     return out
 
 
+def agent_name(client_id: str) -> str:
+    """Human name for a client: used for provenance (by::) and the agent's folder under Agents/."""
+    s = get_settings()
+    if client_id == STATIC_WRITE_CLIENT:
+        return s.mcp_write_token_name or "Hermes"
+    if client_id == STATIC_READ_CLIENT:
+        return "Read-only agent"
+    with db.connect() as conn:
+        r = conn.execute("SELECT label FROM agents WHERE client_id=? AND label IS NOT NULL AND label<>''",
+                         (client_id,)).fetchone()
+        if r:
+            return r["label"]
+        r = conn.execute("SELECT label FROM tokens WHERE client_id=? AND kind='pat' AND label IS NOT NULL",
+                         (client_id,)).fetchone()
+        if r:
+            return r["label"]
+        r = conn.execute("SELECT label, info FROM oauth_clients WHERE client_id=?", (client_id,)).fetchone()
+        if r:
+            return r["label"] or jloads(r["info"], {}).get("client_name") or "OAuth client"
+    return client_id
+
+
 def revoke_client(client_id: str) -> dict:
     with db.connect() as conn:
         n = conn.execute("UPDATE tokens SET revoked_at=? WHERE client_id=? AND revoked_at IS NULL",

@@ -50,59 +50,69 @@ export interface Folder {
   children: Folder[];
 }
 
-export interface Memory {
-  id: number;
-  content: string;
-  category: string;
-  confidence: number;
-  source: string;
-  status: "active" | "archived";
-  pinned: number;
-  created_at: string;
-  updated_at: string;
+export interface Fact {
+  id: string;
+  path: string;
+  subject: string;
+  kind: "profile" | "rules" | "project" | "client" | "person" | "topic";
+  text: string;
+  by_agent: string;
+  on_date: string;
+  src: string;
+  external: boolean;
+  review: "new" | "ok";
+  flag: string;
+  status: "current" | "superseded";
+  until: string;
+  replaced_by: string;
+  reason: string;
   score?: number;
 }
 
-export interface Chat {
-  id: string;
+export interface Subject {
+  path: string;
   title: string;
-  created_at: string;
+  subject: string;
+  kind: Fact["kind"];
+  facts: number;
+  unreviewed: number;
   updated_at: string;
-  message_count: number;
+  aliases: string[];
 }
 
-export interface Source {
-  n: number;
-  path?: string;
-  title?: string;
-  heading?: string;
-  label?: string;
-  kind: string;
-  via?: string;
-}
-
-export interface Action {
-  tool: string;
-  args: Record<string, unknown>;
-  status: string;
-  pending_id?: string;
-  summary?: string;
-  path?: string;
-  error?: string;
-}
-
-export interface Message {
-  id: number;
-  role: "user" | "assistant";
-  content: string;
+export interface Proposal {
+  id: string;
+  path: string;
+  op: "add" | "replace" | "retire";
+  fact_id: string;
+  text: string;
+  agent: string;
+  src: string;
+  external: boolean;
+  flag: string;
+  reason: string;
   created_at: string;
-  meta: {
-    sources?: Source[];
-    actions?: Action[];
-    usage?: { input_tokens: number; output_tokens: number; calls: number };
-    context_tokens?: number;
-    model?: string | null;
-  };
+  current_text?: string | null;
+}
+
+export interface MemoryHealth {
+  facts: number;
+  unreviewed: number;
+  flagged: Fact[];
+  duplicates: { a: Fact; b: Fact; similarity: number }[];
+  stale: Fact[];
+  stale_days: number;
+  core: Record<string, { chars: number; limit: number }>;
+  proposals: number;
+}
+
+export interface RememberResult {
+  status: "saved" | "proposed" | "exists" | "needs_decision" | "skipped";
+  fact_id?: string;
+  similar?: Fact[];
+  fact?: Fact;
+  message?: string;
+  warning?: string;
 }
 
 export interface GraphNode {
@@ -148,11 +158,11 @@ export interface Credential {
 export interface SystemInfo {
   version: string;
   stats: Record<string, number>;
-  ai: { provider: string; base_url: string; configured: boolean; chat_model: string; agent_model: string; utility_model: string };
   embeddings: { provider: string; available: boolean; pending: number; error: string | null; running: boolean };
   last_backup: string | null;
   mcp_enabled: boolean;
   context_token_budget: number;
+  memory: { brief_token_budget: number; core_max_chars: number; stale_days: number; write_token_name: string };
   limits: Record<string, number>;
 }
 

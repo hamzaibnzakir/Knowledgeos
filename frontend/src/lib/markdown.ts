@@ -73,6 +73,9 @@ function stripFrontmatter(src: string): { fm: string; body: string } {
 export function renderMarkdown(src: string): string {
   const { body } = stripFrontmatter(src);
   let html = md.render(body);
+  // Memory facts: show inline fields as quiet labels and hide block ids.
+  html = html.replace(/\s\^[A-Za-z0-9][\w-]{1,31}(?=\s|<)/g, "")
+    .replace(/\[([\w-]+)::\s*([^\]<]*)\]/g, (_m, k, v) => `<span class="field" data-k="${k}">${k === "by" || k === "on" ? "" : k + ": "}${v}</span>`);
   // GitHub-style task lists (read-only in preview)
   html = html.replace(/<li>\[( |x|X)\] /g, (_m, c) =>
     `<li class="task"><input type="checkbox" disabled${c.trim() ? " checked" : ""}> `);

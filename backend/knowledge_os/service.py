@@ -70,6 +70,11 @@ def startup() -> None:
     db.ensure_schema()
     stats = indexer.reconcile()
     log.info("Vault %s indexed: %s", s.vault_dir, stats)
+    from . import memory
+    moved = memory.migrate_legacy()
+    if moved["memories"] or moved["chats"]:
+        log.info("Moved %s v2 memories into Memory/ and exported %s chats to Archive/Chats/",
+                 moved["memories"], moved["chats"])
 
 
 def serve() -> None:

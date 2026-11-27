@@ -30,23 +30,19 @@ class FakeEmbedder:
 def env(tmp_path, monkeypatch):
     monkeypatch.setenv("KOS_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("KOS_EMBEDDINGS", "none")
-    monkeypatch.setenv("KOS_AI_API_KEY", "")
-    monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("MCP_AUTH_TOKEN", "static-write-token")
     monkeypatch.setenv("MCP_READ_TOKEN", "static-read-token")
     monkeypatch.setenv("KOS_BACKGROUND_WORKERS", "false")
     monkeypatch.delenv("KNOWLEDGE_OS_GATE_HASH", raising=False)
     monkeypatch.delenv("KNOWLEDGE_OS_GATE_SALT", raising=False)
-    from knowledge_os import ai, config, db, embeddings
+    from knowledge_os import config, db, embeddings
     config.reset_settings()
     db.reset_schema_cache()
-    ai.set_gateway(None)
     embeddings.set_embedder(None)
     db.ensure_schema()
     yield config.get_settings()
     config.reset_settings()
     db.reset_schema_cache()
-    ai.set_gateway(None)
     embeddings.set_embedder(None)
 
 

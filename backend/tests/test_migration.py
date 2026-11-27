@@ -46,8 +46,14 @@ def test_upgrade_legacy_db(tmp_path, monkeypatch):
     db.ensure_schema()
     indexer.reconcile()
 
-    assert memory.list_memories()[0]["content"] == "Runs EcomLab"
-    assert indexer.stats()["notes"] == 1
+    memory.migrate_legacy()
+    facts = memory.list_facts()
+    assert [(f["id"], f["text"], f["path"]) for f in facts] == [("m1", "Runs EcomLab", "Memory/Topics/Projects.md")]
+    assert indexer.stats()["notes"] >= 4  # Kept + Profile + Rules + Projects topic (+ tidy-up skill, chat archive)
+    import pathlib
+    chats = list(pathlib.Path(data / "vault" / "Archive" / "Chats").glob("*.md"))
+    assert len(chats) == 1 and "**You**" in chats[0].read_text()
+    assert memory.migrate_legacy() == {"memories": 0, "chats": 0}  # idempotent
     assert indexer.unresolved_links()[0]["target"] == "Other"
     with db.connect() as c:
         assert c.execute("SELECT count(*) FROM messages").fetchone()[0] == 1

@@ -75,15 +75,26 @@ def test_semantic_search(authed, fake_embeddings):
 
 
 def test_memory_api(authed):
-    r = authed.post("/api/memories", json={"content": "Prefers dark mode", "category": "preference"}).json()
-    assert r["created"]
-    assert not authed.post("/api/memories", json={"content": "prefers dark mode."}).json()["created"]
-    mid = r["memory"]["id"]
-    authed.post(f"/api/memories/{mid}/forget")
-    assert authed.get("/api/memories").json() == []
-    assert authed.get("/api/memories", params={"status": "archived"}).json()[0]["id"] == mid
-    authed.post(f"/api/memories/{mid}/restore")
-    assert len(authed.get("/api/memories").json()) == 1
+    r = authed.post("/api/memory/facts", json={"subject": "Profile", "fact": "Prefers dark mode"}).json()
+    assert r["status"] == "saved" and r["review"] == "ok"
+    assert authed.post("/api/memory/facts", json={"subject": "Profile", "fact": "prefers dark mode."}).json()["status"] == "exists"
+    fid = r["fact_id"]
+    assert authed.get("/api/memory/facts", params={"path": "Memory/Profile.md"}).json()[0]["id"] == fid
+    edited = authed.patch(f"/api/memory/facts/{fid}", json={"fact": "Prefers dark mode everywhere"}).json()
+    assert edited["status"] == "saved"
+    hist = authed.get("/api/memory/facts", params={"status": "superseded"}).json()
+    assert hist[0]["id"] == fid and hist[0]["replaced_by"] == edited["fact_id"]
+    authed.post(f"/api/memory/facts/{edited['fact_id']}/forget", json={"reason": "changed mind"})
+    assert authed.get("/api/memory/facts", params={"path": "Memory/Profile.md"}).json() == []
+    subjects = {s["subject"] for s in authed.get("/api/memory/subjects").json()}
+    assert {"Profile", "Rules"} <= subjects
+    assert "Brief for" in authed.get("/api/memory/brief").json()["brief"]
+
+
+def test_import_file_and_link_guard(authed):
+    r = authed.post("/api/import/file", files={"file": ("brief.txt", b"Client wants a new landing page", "text/plain")})
+    assert r.status_code == 200 and r.json()["path"] == "Inbox/brief.md"
+    assert authed.post("/api/import/link", json={"url": "http://127.0.0.1:1/x"}).status_code == 400
 
 
 def test_agent_tokens(authed):
@@ -95,22 +106,6 @@ def test_agent_tokens(authed):
     assert any(a["client_id"] == r["client_id"] and "token" not in a for a in listed)
     authed.post(f"/api/agents/{r['client_id']}/revoke")
     assert oauth.verify_bearer(r["token"]) is None
-
-
-def test_ssrf_blocked(authed):
-    r = authed.post("/api/ingest-link", json={"url": "http://127.0.0.1:8786/api/notes"})
-    assert r.status_code == 400 and "private" in r.json()["detail"]
-    r = authed.post("/api/ingest-link", json={"url": "file:///etc/passwd"})
-    assert r.status_code == 400
-
-
-def test_upload_and_file_into_vault(authed):
-    r = authed.post("/api/attachments", files={"file": ("brief.txt", b"Client wants a new landing page", "text/plain")})
-    aid = r.json()["id"]
-    assert r.json()["extracted_chars"] > 0
-    saved = authed.post(f"/api/attachments/{aid}/save", json={"destination": "Projects/Brief"}).json()
-    assert saved["path"] == "Projects/Brief.md"
-    assert "landing page" in authed.get("/api/notes/read", params={"path": saved["path"]}).json()["content"]
 
 
 def test_backup_and_export(authed):
